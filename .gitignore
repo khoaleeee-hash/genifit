@@ -5,8 +5,8 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
-#### Spring Boot config ###
-#src/main/resources/application.properties
+### Spring Boot config ###
+src/main/resources/application.properties
 
 ### Mac ###
 .DS_Store
