@@ -1,4 +1,4 @@
-package com.examp.genifit.dto;
+package com.examp.genifit.entity;
 
 public enum MealTime {
     BREAKFAST,

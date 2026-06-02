@@ -1,45 +1,39 @@
-package com.examp.genifit.dto;
+package com.examp.genifit.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "user_profiles")
+@Table(name = "advanced_profiles")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 
-public class UserProfile {
+public class AdvancedProfile {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer profileId;
+    private Integer advancedProfileId;
 
     @OneToOne
-    @JoinColumn(name = "user_id", unique = true)
+    @JoinColumn(name = "user_id", unique = true, nullable = false)
     private User user;
 
-    private Double heightCm;
+    @Column(columnDefinition = "TEXT")
+    private String medicalConditions;
 
-    private Double weightKg;
+    @Column(columnDefinition = "TEXT")
+    private String allergies;
 
-    private Integer age;
+    private Double targetWeight;
 
-    @Enumerated(EnumType.STRING)
-    @Column(length = 20)
-    private Gender gender;
+    private LocalDate targetDate;
 
-    @Enumerated(EnumType.STRING)
-    @Column(length = 50)
-    private GoalType goal;
-
-    @Column(length = 50)
-    private String activityLevel;
-
-    private Double baseTargetCalorie;
+    private Double dailyTargetCalorie;
 
     private LocalDateTime createdAt;
 

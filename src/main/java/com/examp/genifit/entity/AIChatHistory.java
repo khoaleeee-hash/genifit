@@ -1,4 +1,5 @@
-package com.examp.genifit.dto;
+package com.examp.genifit.entity;
+
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -6,31 +7,27 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "admin_logs")
+@Table(name = "ai_chat_histories")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 
-public class AdminLog {
+public class AIChatHistory {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer adminLogId;
+    private Integer chatId;
 
     @ManyToOne
-    @JoinColumn(name = "admin_id", nullable = false)
-    private User admin;
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
+    @Column(columnDefinition = "TEXT")
+    private String prompt;
 
-
-    @Column(length = 255)
-    private String action;
-
-    @Column(length = 100)
-    private String targetTable;
-
-    private Integer targetId;
+    @Column(columnDefinition = "TEXT")
+    private String response;
 
     private LocalDateTime createdAt;
 
