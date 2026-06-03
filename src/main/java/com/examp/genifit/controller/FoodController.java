@@ -19,7 +19,7 @@ public class FoodController {
 
     private final FoodService foodService;
 
-    @GetMapping
+    @GetMapping("/get-All")
     public List<FoodResponse> getAllFoods(){
         return foodService.getAllFoods();
     }
@@ -29,7 +29,7 @@ public class FoodController {
         return foodService.searchFoods(keyword);
     }
 
-    @PostMapping
+    @PostMapping("/create")
     public FoodResponse createFood(@RequestBody CreateFoodRequest request){
         return foodService.createFood(request);
     }

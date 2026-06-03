@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class DailyLogController {
     private final DailyLogService dailyLogService;
 
-    @PostMapping("/manual-foods")
+    @PostMapping("/meals/manual-foods")
     public AddManualFoodResponse addManualFood(
             @RequestBody AddManualFoodRequest request
             ){
