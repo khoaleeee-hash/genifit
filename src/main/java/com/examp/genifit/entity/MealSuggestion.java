@@ -24,7 +24,7 @@ public class MealSuggestion {
 
     @ManyToOne
     @JoinColumn(name = "guest_id")
-    private Guest guestSession;
+    private Guest guest;
 
     @Column(length = 150)
     private String suggestedFood;
