@@ -1,5 +1,7 @@
 package com.examp.genifit.service;
 
+import com.examp.genifit.dto.request.AddManualFoodRequest;
+import com.examp.genifit.dto.response.AddManualFoodResponse;
 import com.examp.genifit.dto.DailyCaloriesResponse;
 import com.examp.genifit.dto.DailyLogResponse;
 import com.examp.genifit.dto.DailySummaryResponse;
@@ -8,6 +10,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 public interface DailyLogService {
+    AddManualFoodResponse addManualFood(AddManualFoodRequest request);
 
     DailyCaloriesResponse getTodayCalories(Integer userId);
 
