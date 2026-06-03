@@ -26,13 +26,13 @@ public class Guest {
 
     private LocalDateTime expiredAt;
 
-    @OneToMany(mappedBy = "guestSession", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "guest", cascade = CascadeType.ALL)
     private List<DailyLog> dailyLogs = new ArrayList<>();
 
-    @OneToMany(mappedBy = "guestSession", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "guest", cascade = CascadeType.ALL)
     private List<AIScanHistory> scanHistories = new ArrayList<>();
 
-    @OneToMany(mappedBy = "guestSession", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "guest", cascade = CascadeType.ALL)
     private List<MealSuggestion> mealSuggestions = new ArrayList<>();
 
     @PrePersist

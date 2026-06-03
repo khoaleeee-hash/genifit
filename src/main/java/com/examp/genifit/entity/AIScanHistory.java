@@ -24,7 +24,7 @@ public class AIScanHistory {
 
     @ManyToOne
     @JoinColumn(name = "guest_id")
-    private Guest guestSession;
+    private Guest guest;
 
     @Column(length = 255)
     private String imageUrl;

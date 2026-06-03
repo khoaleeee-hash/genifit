@@ -27,7 +27,7 @@ public class DailyLog {
 
     @ManyToOne
     @JoinColumn(name = "guest_id")
-    private Guest guestSession;
+    private Guest guest;
 
     @Column(nullable = false)
     private LocalDate logDate;
