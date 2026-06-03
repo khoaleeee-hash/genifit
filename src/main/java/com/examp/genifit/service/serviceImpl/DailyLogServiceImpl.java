@@ -1,5 +1,10 @@
 package com.examp.genifit.service.serviceImpl;
 
+import com.examp.genifit.common.exception.ApiException;
+import com.examp.genifit.common.exception.ErrorCode;
+import com.examp.genifit.dto.response.DailyCaloriesResponse;
+import com.examp.genifit.dto.response.DailyLogResponse;
+import com.examp.genifit.dto.response.DailySummaryResponse;
 import com.examp.genifit.dto.request.AddManualFoodRequest;
 import com.examp.genifit.dto.response.AddManualFoodResponse;
 import com.examp.genifit.entity.*;
@@ -7,9 +12,11 @@ import com.examp.genifit.repository.*;
 import com.examp.genifit.service.DailyLogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -108,6 +115,69 @@ public class DailyLogServiceImpl implements DailyLogService {
                 isDuplicate,
                 duplicateMessage
         );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DailyCaloriesResponse getTodayCalories(Integer userId) {
+
+        DailyLog dailyLog = dailyLogRepository.findByUser_UserIdAndLogDate(userId, LocalDate.now())
+                        .orElseThrow(() -> new ApiException(ErrorCode.DAILY_LOG_NOT_FOUND));
+
+        return DailyCaloriesResponse.builder()
+                .date(dailyLog.getLogDate())
+                .totalCalories(dailyLog.getTotalCalories())
+                .targetCalories(dailyLog.getTargetCalories())
+                .statusColor(dailyLog.getStatusColor())
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DailyLogResponse getCaloriesByDate(Integer userId, LocalDate date) {
+
+        DailyLog dailyLog = dailyLogRepository.findByUser_UserIdAndLogDate(userId, date)
+                        .orElseThrow(() -> new ApiException(ErrorCode.DAILY_LOG_NOT_FOUND));
+
+        List<DailyLogResponse.FoodDetail> foods = dailyLog.getLogDetails()
+                        .stream()
+                        .map(detail ->
+                                DailyLogResponse.FoodDetail
+                                        .builder()
+                                        .foodName(detail.getFoodItem().getFoodName())
+                                        .quantity(detail.getQuantity())
+                                        .calories(detail.getCalories())
+                                        .mealTime(detail.getMealTime())
+                                        .build()
+                        )
+                        .toList();
+
+        return DailyLogResponse.builder()
+                .date(dailyLog.getLogDate())
+                .totalCalories(dailyLog.getTotalCalories())
+                .targetCalories(dailyLog.getTargetCalories())
+                .statusColor(dailyLog.getStatusColor())
+                .foods(foods)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DailySummaryResponse> getMonthlyLogs(Integer userId, Integer year, Integer month) {
+
+        LocalDate startDate = LocalDate.of(year, month, 1);
+
+        LocalDate endDate = startDate.withDayOfMonth(startDate.lengthOfMonth());
+
+        return dailyLogRepository.findAllByUser_UserIdAndLogDateBetween(userId, startDate, endDate)
+                .stream()
+                .map(log -> DailySummaryResponse.builder()
+                                .date(log.getLogDate())
+                                .totalCalories(log.getTotalCalories())
+                                .statusColor(log.getStatusColor())
+                                .build()
+                )
+                .toList();
     }
 
     private FoodItem findFoodItem(AddManualFoodRequest request) {

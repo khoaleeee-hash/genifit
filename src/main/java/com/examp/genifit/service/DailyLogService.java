@@ -2,9 +2,9 @@ package com.examp.genifit.service;
 
 import com.examp.genifit.dto.request.AddManualFoodRequest;
 import com.examp.genifit.dto.response.AddManualFoodResponse;
-import com.examp.genifit.dto.DailyCaloriesResponse;
-import com.examp.genifit.dto.DailyLogResponse;
-import com.examp.genifit.dto.DailySummaryResponse;
+import com.examp.genifit.dto.response.DailyCaloriesResponse;
+import com.examp.genifit.dto.response.DailyLogResponse;
+import com.examp.genifit.dto.response.DailySummaryResponse;
 
 import java.time.LocalDate;
 import java.util.List;

@@ -1,14 +1,13 @@
-package com.examp.genifit.dto;
+package com.examp.genifit.dto.response;
 
-import lombok.*;
+import com.examp.genifit.entity.StatusColor;
+import lombok.Builder;
+import lombok.Data;
 
 import java.time.LocalDate;
 
-@Getter
-@Setter
+@Data
 @Builder
-@NoArgsConstructor
-@AllArgsConstructor
 public class DailyCaloriesResponse {
 
     private LocalDate date;
@@ -17,4 +16,5 @@ public class DailyCaloriesResponse {
 
     private Double targetCalories;
 
+    private StatusColor statusColor;
 }
