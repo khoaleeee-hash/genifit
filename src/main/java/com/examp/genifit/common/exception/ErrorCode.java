@@ -8,7 +8,11 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public enum ErrorCode {
 
+    UNAUTHENTICATED(HttpStatus.UNAUTHORIZED,"AU_001", "Unauthenticated"),
+
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_001", "User not found"),
+
+    USER_EXISTED(HttpStatus.BAD_REQUEST, "USER_002", "User already existed"),
 
     FOOD_NOT_FOUND(HttpStatus.NOT_FOUND, "FOOD_001", "Food not found"),
 
