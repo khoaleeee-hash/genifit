@@ -1,26 +1,23 @@
-package com.examp.genifit.dto.response;
+package com.examp.genifit.dto.request;
 
-import lombok.AllArgsConstructor;
+import com.examp.genifit.dto.response.DetectedFoodItemResponse;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.List;
 
-@Getter
 @Setter
-@NoArgsConstructor
-@AllArgsConstructor
+@Getter
 
-public class GeminiFoodScanResponse {
-    private String message;
+public class FoodEvaluationRequest {
+    private Integer userId;
+    private Integer guestId;
     private List<DetectedFoodItemResponse> foods;
     private Double totalCalories;
     private Double totalProtein;
     private Double totalCarbs;
     private Double totalFat;
     private Double confidence;
-    private String note;
     private String source;
-
+    private String note;
 }
