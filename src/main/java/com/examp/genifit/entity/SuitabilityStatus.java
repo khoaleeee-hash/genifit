@@ -2,5 +2,7 @@ package com.examp.genifit.entity;
 
 public enum SuitabilityStatus {
     SUITABLE,
-    UNSUITABLE
+    WARNING,
+    UNSUITABLE,
+    UNKNOWN
 }

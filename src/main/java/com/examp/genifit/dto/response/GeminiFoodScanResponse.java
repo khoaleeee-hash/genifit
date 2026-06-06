@@ -13,6 +13,7 @@ import java.util.List;
 @AllArgsConstructor
 
 public class GeminiFoodScanResponse {
+    private Integer scanId;
     private String message;
     private List<DetectedFoodItemResponse> foods;
     private Double totalCalories;
