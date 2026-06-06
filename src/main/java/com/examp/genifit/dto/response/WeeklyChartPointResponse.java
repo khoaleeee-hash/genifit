@@ -12,9 +12,11 @@ import java.time.LocalDate;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class DailySummaryResponse {
+public class WeeklyChartPointResponse {
 
     private LocalDate date;
+
+    private String label;
 
     private Double totalCalories;
 
