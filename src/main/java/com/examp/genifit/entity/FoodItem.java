@@ -38,6 +38,12 @@ public class FoodItem {
     @JoinColumn(name = "created_by")
     private User createdBy;
 
+    private Boolean isPublic;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    private FoodApprovalStatus approvalStatus;
+
     private LocalDateTime createdAt;
 
     @OneToMany(mappedBy = "foodItem")
@@ -46,6 +52,14 @@ public class FoodItem {
     @PrePersist
     public void onCreate() {
         createdAt = LocalDateTime.now();
+
+        if (isPublic == null) {
+            isPublic = false;
+        }
+
+        if (approvalStatus == null) {
+            approvalStatus = FoodApprovalStatus.PENDING;
+        }
     }
 
 }

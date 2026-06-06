@@ -13,6 +13,9 @@ public class FoodResponse {
     private Double carbs;
     private Double fat;
     private String nutritionInfo;
+    private Boolean isPublic;
+    private String approvalStatus;
+    private Integer createdByUserId;
 
     public FoodResponse(FoodItem foodItem) {
         this.foodId = foodItem.getFoodId();
@@ -21,5 +24,12 @@ public class FoodResponse {
         this.carbs = foodItem.getCarbs();
         this.fat = foodItem.getFat();
         this.nutritionInfo = foodItem.getNutritionInfo();
+        this.isPublic = foodItem.getIsPublic();
+        this.approvalStatus = foodItem.getApprovalStatus() == null
+                ? null
+                : foodItem.getApprovalStatus().name();
+        this.createdByUserId = foodItem.getCreatedBy() == null
+                ? null
+                : foodItem.getCreatedBy().getUserId();
     }
 }

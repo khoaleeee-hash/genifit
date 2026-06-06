@@ -2,7 +2,10 @@ package com.examp.genifit.controller;
 
 import com.examp.genifit.common.response.ApiResponse;
 import com.examp.genifit.dto.request.CreateUserRequest;
+import com.examp.genifit.dto.request.GeminiMealSuggestionRequest;
+import com.examp.genifit.dto.response.GeminiMealSuggestionResponse;
 import com.examp.genifit.dto.response.UserResponse;
+import com.examp.genifit.service.GeminiMealSuggestionService;
 import com.examp.genifit.service.UserService;
 import jakarta.validation.Valid;
 import lombok.AccessLevel;
@@ -19,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class UserController {
     UserService userService;
-
+    private final GeminiMealSuggestionService geminiMealSuggestionService;
 
     @PostMapping("/register")
     public ApiResponse<UserResponse> createUser(@RequestBody @Valid CreateUserRequest request) {
@@ -27,6 +30,13 @@ public class UserController {
                 "Create user successfully",
                 userService.createUser(request)
         );
+    }
+
+    @PostMapping("/from-ingredients")
+    public GeminiMealSuggestionResponse suggestMealsFromIngredients(
+            @RequestBody GeminiMealSuggestionRequest request
+    ) {
+        return geminiMealSuggestionService.suggestMealsFromIngredients(request);
     }
 
 }
