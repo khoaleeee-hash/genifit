@@ -7,6 +7,7 @@ import com.examp.genifit.dto.response.GeminiMealSuggestionResponse;
 import com.examp.genifit.dto.response.UserResponse;
 import com.examp.genifit.service.GeminiMealSuggestionService;
 import com.examp.genifit.service.UserService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/users")
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 @RequiredArgsConstructor
+@Tag(name = "User")
 public class UserController {
     UserService userService;
     private final GeminiMealSuggestionService geminiMealSuggestionService;
