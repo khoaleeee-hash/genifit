@@ -1,0 +1,44 @@
+package com.examp.genifit.controller;
+
+import com.examp.genifit.common.response.ApiResponse;
+import com.examp.genifit.dto.request.CreateUserRequest;
+import com.examp.genifit.dto.request.GeminiMealSuggestionRequest;
+import com.examp.genifit.dto.response.GeminiMealSuggestionResponse;
+import com.examp.genifit.dto.response.UserResponse;
+import com.examp.genifit.service.GeminiMealSuggestionService;
+import com.examp.genifit.service.UserService;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
+import lombok.experimental.FieldDefaults;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/users")
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+@RequiredArgsConstructor
+@Tag(name = "User")
+public class UserController {
+    UserService userService;
+    private final GeminiMealSuggestionService geminiMealSuggestionService;
+
+    @PostMapping("/register")
+    public ApiResponse<UserResponse> createUser(@RequestBody @Valid CreateUserRequest request) {
+        return ApiResponse.success(
+                "Create user successfully",
+                userService.createUser(request)
+        );
+    }
+
+    @PostMapping("/from-ingredients")
+    public GeminiMealSuggestionResponse suggestMealsFromIngredients(
+            @RequestBody GeminiMealSuggestionRequest request
+    ) {
+        return geminiMealSuggestionService.suggestMealsFromIngredients(request);
+    }
+
+}

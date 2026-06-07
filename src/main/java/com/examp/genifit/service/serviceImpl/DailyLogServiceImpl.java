@@ -1,15 +1,25 @@
 package com.examp.genifit.service.serviceImpl;
 
+import com.examp.genifit.common.exception.ApiException;
+import com.examp.genifit.common.exception.ErrorCode;
+import com.examp.genifit.dto.response.*;
 import com.examp.genifit.dto.request.AddManualFoodRequest;
-import com.examp.genifit.dto.response.AddManualFoodResponse;
 import com.examp.genifit.entity.*;
 import com.examp.genifit.repository.*;
 import com.examp.genifit.service.DailyLogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @Service
 @RequiredArgsConstructor
@@ -110,6 +120,136 @@ public class DailyLogServiceImpl implements DailyLogService {
         );
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public DailyCaloriesResponse getTodayCalories(Integer userId) {
+
+        DailyLog dailyLog = dailyLogRepository.findByUser_UserIdAndLogDate(userId, LocalDate.now())
+                .orElseThrow(() -> new ApiException(ErrorCode.DAILY_LOG_NOT_FOUND));
+
+        return DailyCaloriesResponse.builder()
+                .date(dailyLog.getLogDate())
+                .totalCalories(dailyLog.getTotalCalories())
+                .targetCalories(dailyLog.getTargetCalories())
+                .statusColor(dailyLog.getStatusColor())
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DailyLogResponse getCaloriesByDate(Integer userId, LocalDate date) {
+
+        DailyLog dailyLog = dailyLogRepository.findByUser_UserIdAndLogDate(userId, date)
+                .orElseThrow(() -> new ApiException(ErrorCode.DAILY_LOG_NOT_FOUND));
+
+        List<DailyLogResponse.FoodDetail> foods = dailyLog.getLogDetails()
+                .stream()
+                .map(detail ->
+                        DailyLogResponse.FoodDetail
+                                .builder()
+                                .foodName(detail.getFoodItem().getFoodName())
+                                .quantity(detail.getQuantity())
+                                .calories(detail.getCalories())
+                                .mealTime(detail.getMealTime())
+                                .build()
+                )
+                .toList();
+
+        return DailyLogResponse.builder()
+                .date(dailyLog.getLogDate())
+                .totalCalories(dailyLog.getTotalCalories())
+                .targetCalories(dailyLog.getTargetCalories())
+                .statusColor(dailyLog.getStatusColor())
+                .foods(foods)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public HomeStatusResponse getHomeStatus(Integer userId) {
+
+        LocalDate today = LocalDate.now();
+
+        DailyLog dailyLog = dailyLogRepository.findByUser_UserIdAndLogDate(userId, today)
+                .orElseThrow(() -> new ApiException(ErrorCode.DAILY_LOG_NOT_FOUND));
+
+        Double totalCalories = safeDouble(dailyLog.getTotalCalories());
+        Double targetCalories = resolveTargetCalories(dailyLog.getTargetCalories());
+
+        double progressPercent = calculateProgressPercent(totalCalories, targetCalories);
+
+        StatusColor statusColor = calculateStatusColor(totalCalories, targetCalories);
+
+        return HomeStatusResponse.builder()
+                .totalCalories(totalCalories)
+                .targetCalories(targetCalories)
+                .progressPercent(progressPercent)
+                .statusColor(statusColor)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public WeeklyChartResponse getWeeklyChart(Integer userId) {
+
+        if (!userRepository.existsById(userId)) {
+            throw new ApiException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusDays(6);
+
+        List<DailyLog> logs = dailyLogRepository.findAllByUser_UserIdAndLogDateBetweenOrderByLogDateAsc(userId, startDate, endDate
+        );
+
+        Map<LocalDate, DailyLog> logMap = logs.stream()
+                .collect(Collectors.toMap(DailyLog::getLogDate, Function.identity()));
+
+        List<WeeklyChartPointResponse> points =
+                IntStream.rangeClosed(0, 6).mapToObj(index -> {
+                            LocalDate date = startDate.plusDays(index);
+                            DailyLog log = logMap.get(date);
+
+                            if (log == null) {
+                                return buildEmptyChartPoint(date);
+                            }
+
+                            return mapToWeeklyChartPoint(log);
+                        })
+                        .toList();
+
+        return WeeklyChartResponse.builder()
+                .range(LocalDateRangeResponse.builder()
+                        .startDate(startDate)
+                        .endDate(endDate)
+                        .build()
+                )
+                .points(points)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DailySummaryResponse> getMonthlyLogs(Integer userId, Integer year, Integer month) {
+        validateYearAndMonth(year, month);
+
+        if (!userRepository.existsById(userId)) {
+            throw new ApiException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        YearMonth yearMonth = YearMonth.of(year, month);
+
+        LocalDate startDate = yearMonth.atDay(1);
+        LocalDate endDate = yearMonth.atEndOfMonth();
+
+        List<DailyLog> logs = dailyLogRepository
+                .findAllByUser_UserIdAndLogDateBetweenOrderByLogDateAsc(userId, startDate, endDate);
+
+        return logs.stream()
+                .map(this::mapToDailySummaryResponse)
+                .toList();
+    }
+
     private FoodItem findFoodItem(AddManualFoodRequest request) {
 
         if (request.getFoodId() != null) {
@@ -151,6 +291,10 @@ public class DailyLogServiceImpl implements DailyLogService {
 
     private StatusColor calculateStatusColor(Double totalCalories, Double targetCalories) {
 
+        if (totalCalories == null) {
+            totalCalories = 0.0;
+        }
+
         if (targetCalories == null || targetCalories <= 0) {
             targetCalories = 2000.0;
         }
@@ -165,6 +309,101 @@ public class DailyLogServiceImpl implements DailyLogService {
             return StatusColor.YELLOW;
         } else {
             return StatusColor.RED;
+        }
+    }
+
+    //Helper cho monthly và weekly chart
+    private DailySummaryResponse mapToDailySummaryResponse(DailyLog log) {
+
+        Double totalCalories = safeDouble(log.getTotalCalories());
+        Double targetCalories = resolveTargetCalories(log.getTargetCalories());
+        Double progressPercent = calculateProgressPercent(
+                totalCalories,
+                targetCalories
+        );
+
+        StatusColor statusColor = log.getStatusColor() != null
+                ? log.getStatusColor()
+                : calculateStatusColor(totalCalories, targetCalories);
+
+        return DailySummaryResponse.builder()
+                .date(log.getLogDate())
+                .totalCalories(totalCalories)
+                .targetCalories(targetCalories)
+                .progressPercent(progressPercent)
+                .statusColor(statusColor)
+                .build();
+    }
+
+    private WeeklyChartPointResponse mapToWeeklyChartPoint(DailyLog log) {
+
+        Double totalCalories = safeDouble(log.getTotalCalories());
+        Double targetCalories = resolveTargetCalories(log.getTargetCalories());
+        Double progressPercent = calculateProgressPercent(
+                totalCalories,
+                targetCalories
+        );
+
+        StatusColor statusColor = log.getStatusColor() != null
+                ? log.getStatusColor()
+                : calculateStatusColor(totalCalories, targetCalories);
+
+        return WeeklyChartPointResponse.builder()
+                .date(log.getLogDate())
+                .label(formatChartLabel(log.getLogDate()))
+                .totalCalories(totalCalories)
+                .targetCalories(targetCalories)
+                .progressPercent(progressPercent)
+                .statusColor(statusColor)
+                .build();
+    }
+
+    private WeeklyChartPointResponse buildEmptyChartPoint(LocalDate date) {
+
+        Double totalCalories = 0.0;
+        Double targetCalories = 2000.0;
+
+        return WeeklyChartPointResponse.builder()
+                .date(date)
+                .label(formatChartLabel(date))
+                .totalCalories(totalCalories)
+                .targetCalories(targetCalories)
+                .progressPercent(0.0)
+                .statusColor(StatusColor.BLUE)
+                .build();
+    }
+
+    private String formatChartLabel(LocalDate date) {
+        return date.format(DateTimeFormatter.ofPattern("MM-dd"));
+    }
+
+    private Double safeDouble(Double value) {
+        return value == null ? 0.0 : value;
+    }
+
+    private Double resolveTargetCalories(Double targetCalories) {
+        return targetCalories == null || targetCalories <= 0
+                ? 2000.0
+                : targetCalories;
+    }
+
+    private Double calculateProgressPercent(Double totalCalories, Double targetCalories) {
+        if (targetCalories == null || targetCalories <= 0) {
+            return 0.0;
+        }
+
+        double percent = totalCalories / targetCalories * 100;
+
+        return Math.round(percent * 10.0) / 10.0;
+    }
+
+    private void validateYearAndMonth(Integer year, Integer month) {
+        if (year == null || year < 2000 || year > 2100) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "Year must be between 2000 and 2100");
+        }
+
+        if (month == null || month < 1 || month > 12) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "Month must be between 1 and 12");
         }
     }
 }
