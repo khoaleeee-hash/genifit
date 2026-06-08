@@ -26,7 +26,15 @@ public enum ErrorCode {
 
     VALIDATION_ERROR(HttpStatus.BAD_REQUEST, "COMMON_001", "Validation failed"),
 
-    INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "COMMON_999", "Internal server error");
+    INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "COMMON_999", "Internal server error"),
+
+    USER_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "PROFILE_001", "User profile not found"),
+
+    ADVANCED_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "ADV_PROFILE_001", "Advanced profile not found"),
+
+    INVALID_WEIGHT_PROGRESS_CONFIG(HttpStatus.BAD_REQUEST, "WP_002", "Invalid weight progress configuration"),
+
+    INVALID_WEIGHT_VALUE(HttpStatus.BAD_REQUEST, "WP_003", "Invalid weight value");
 
     private final HttpStatus status;
     private final String code;
