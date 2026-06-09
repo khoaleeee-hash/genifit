@@ -1,13 +1,13 @@
 package com.examp.genifit.controller;
 
-import com.examp.genifit.dto.request.UpdateFoodRequest;
+import com.examp.genifit.dto.request.FoodPagingRequest;
+import com.examp.genifit.dto.request.FoodSearchRequest;
 import com.examp.genifit.dto.response.FoodResponse;
+import com.examp.genifit.dto.response.PageResponse;
 import com.examp.genifit.service.FoodService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/foods")
@@ -17,14 +17,48 @@ public class FoodController {
 
     private final FoodService foodService;
 
-    @GetMapping("/get-all")
-    public List<FoodResponse> getAllFoods() {
-        return foodService.getAllFoods();
+    @PostMapping("/get-all")
+    public PageResponse<FoodResponse> getAllFoods(
+            @RequestBody(required = false) FoodPagingRequest request
+    ) {
+        int pageNum = 1;
+        int pageSize = 10;
+
+        if (request != null && request.getPageInfo() != null) {
+            if (request.getPageInfo().getPageNum() != null) {
+                pageNum = request.getPageInfo().getPageNum();
+            }
+
+            if (request.getPageInfo().getPageSize() != null) {
+                pageSize = request.getPageInfo().getPageSize();
+            }
+        }
+
+        return foodService.getAllFoods(pageNum, pageSize);
     }
 
-    @GetMapping("/search")
-    public List<FoodResponse> searchFoods(@RequestParam String keyword) {
-        return foodService.searchFoods(keyword);
-    }
+    @PostMapping("/search")
+    public PageResponse<FoodResponse> searchFoods(
+            @RequestBody(required = false) FoodSearchRequest request
+    ) {
+        String keyword = null;
+        int pageNum = 1;
+        int pageSize = 10;
 
+        if (request != null) {
+            keyword = request.getKeyword();
+
+            if (request.getPageInfo() != null) {
+                if (request.getPageInfo().getPageNum() != null) {
+                    pageNum = request.getPageInfo().getPageNum();
+                }
+
+                if (request.getPageInfo().getPageSize() != null) {
+                    pageSize = request.getPageInfo().getPageSize();
+                }
+            }
+        }
+
+        return foodService.searchFoods(keyword, pageNum, pageSize);
+    }
 }
