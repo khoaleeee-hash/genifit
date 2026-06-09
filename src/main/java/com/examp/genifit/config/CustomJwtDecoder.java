@@ -26,7 +26,7 @@ public class CustomJwtDecoder implements JwtDecoder {
 
     private final AuthenticationService authenticationService;
 
-    private InvalidatedTokenRepository invalidatedTokenRepository;
+    private final InvalidatedTokenRepository invalidatedTokenRepository;
 
     private NimbusJwtDecoder nimbusJwtDecoder = null;
 
