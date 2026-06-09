@@ -3,11 +3,17 @@ package com.examp.genifit.controller;
 import com.examp.genifit.dto.request.FoodEvaluationRequest;
 import com.examp.genifit.dto.response.FoodEvaluationResponse;
 import com.examp.genifit.dto.response.GeminiFoodScanResponse;
+import com.examp.genifit.entity.User;
+import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.service.FoodEvaluationService;
 import com.examp.genifit.service.GeminiFoodScanService;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -19,16 +25,31 @@ public class FoodEvaluationController {
 
     private final GeminiFoodScanService geminiFoodScanService;
     private final FoodEvaluationService foodEvaluationService;
+    private final UserRepository userRepository;
 
     @PostMapping(
             value = "/scan-and-evaluate",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
     public FoodEvaluationResponse scanAndEvaluate(
+            @Parameter(
+                    description = "Food image file",
+                    required = true,
+                    schema = @Schema(type = "string", format = "binary")
+            )
             @RequestParam("image") MultipartFile image,
-            @RequestParam(required = false) Integer userId,
             @RequestParam(required = false) Integer guestId
     ) {
+        Integer userId = getCurrentUserIdOrNull();
+
+        if (userId == null && guestId == null) {
+            throw new RuntimeException("Please login or provide guestId");
+        }
+
+        if (userId != null) {
+            guestId = null;
+        }
+
         GeminiFoodScanResponse scanResponse = geminiFoodScanService.scanFoodImage(
                 image,
                 userId,
@@ -54,6 +75,37 @@ public class FoodEvaluationController {
     public FoodEvaluationResponse evaluateScannedFood(
             @RequestBody FoodEvaluationRequest request
     ) {
+        Integer userId = getCurrentUserIdOrNull();
+
+        if (userId != null) {
+            request.setUserId(userId);
+            request.setGuestId(null);
+        }
+
+        if (request.getUserId() == null && request.getGuestId() == null) {
+            throw new RuntimeException("Please login or provide guestId");
+        }
+
         return foodEvaluationService.evaluateScannedFood(request);
+    }
+
+    private Integer getCurrentUserIdOrNull() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return null;
+        }
+
+        Object principal = authentication.getPrincipal();
+
+        if (principal == null || principal.equals("anonymousUser")) {
+            return null;
+        }
+
+        String username = authentication.getName();
+
+        return userRepository.findByUsername(username)
+                .map(User::getUserId)
+                .orElse(null);
     }
 }
