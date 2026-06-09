@@ -7,5 +7,4 @@ import lombok.Setter;
 @Setter
 public class FoodSearchRequest {
     private String keyword;
-    private PageInfoRequest pageInfo;
 }

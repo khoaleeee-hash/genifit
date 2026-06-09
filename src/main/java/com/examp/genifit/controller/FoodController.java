@@ -1,6 +1,5 @@
 package com.examp.genifit.controller;
 
-import com.examp.genifit.dto.request.FoodPagingRequest;
 import com.examp.genifit.dto.request.FoodSearchRequest;
 import com.examp.genifit.dto.response.FoodResponse;
 import com.examp.genifit.dto.response.PageResponse;
@@ -19,44 +18,22 @@ public class FoodController {
 
     @PostMapping("/get-all")
     public PageResponse<FoodResponse> getAllFoods(
-            @RequestBody(required = false) FoodPagingRequest request
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "10") int pageSize
     ) {
-        int pageNum = 1;
-        int pageSize = 10;
-
-        if (request != null && request.getPageInfo() != null) {
-            if (request.getPageInfo().getPageNum() != null) {
-                pageNum = request.getPageInfo().getPageNum();
-            }
-
-            if (request.getPageInfo().getPageSize() != null) {
-                pageSize = request.getPageInfo().getPageSize();
-            }
-        }
-
         return foodService.getAllFoods(pageNum, pageSize);
     }
 
     @PostMapping("/search")
     public PageResponse<FoodResponse> searchFoods(
-            @RequestBody(required = false) FoodSearchRequest request
+            @RequestBody(required = false) FoodSearchRequest request,
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "10") int pageSize
     ) {
         String keyword = null;
-        int pageNum = 1;
-        int pageSize = 10;
 
         if (request != null) {
             keyword = request.getKeyword();
-
-            if (request.getPageInfo() != null) {
-                if (request.getPageInfo().getPageNum() != null) {
-                    pageNum = request.getPageInfo().getPageNum();
-                }
-
-                if (request.getPageInfo().getPageSize() != null) {
-                    pageSize = request.getPageInfo().getPageSize();
-                }
-            }
         }
 
         return foodService.searchFoods(keyword, pageNum, pageSize);
