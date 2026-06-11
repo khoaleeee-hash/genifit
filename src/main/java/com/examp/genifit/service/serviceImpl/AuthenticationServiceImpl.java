@@ -10,14 +10,18 @@ import com.examp.genifit.dto.response.AuthenticationResponse;
 import com.examp.genifit.dto.response.IntrospectResponse;
 import com.examp.genifit.entity.InvalidatedToken;
 import com.examp.genifit.entity.User;
+import com.examp.genifit.entity.UserRole;
 import com.examp.genifit.repository.InvalidatedTokenRepository;
 import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.service.AuthenticationService;
+import com.examp.genifit.service.GoogleAuthService;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.nimbusds.jose.*;
 import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import jakarta.transaction.Transactional;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -41,6 +45,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     UserRepository userRepository;
     PasswordEncoder passwordEncoder;
     InvalidatedTokenRepository invalidatedTokenRepository;
+    GoogleAuthService googleAuthService;
 
     @NonFinal
     @Value("${jwt.signerKey}")
@@ -199,5 +204,36 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             throw new ApiException(ErrorCode.UNAUTHENTICATED);
         }
         return signedJWT;
+    }
+
+    @Override
+    @Transactional
+    public AuthenticationResponse authenticateWithGoogle(String idTokenString) {
+        try {
+            GoogleIdToken.Payload payload = googleAuthService.verifyToken(idTokenString);
+            String email = payload.getEmail();
+
+            User user = userRepository.findByUsername(email).orElseGet(() -> {
+                User newUser = new User();
+                newUser.setUsername(email);
+                newUser.setEmail(email);
+                newUser.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
+                newUser.setRole(UserRole.MEMBER);
+                return userRepository.save(newUser);
+            });
+
+            String accessToken = generateToken(user);
+            String refreshToken = generateRefreshToken(user);
+
+            return AuthenticationResponse.builder()
+                    .accessToken(accessToken)
+                    .refreshToken(refreshToken)
+                    .authenticated(true)
+                    .build();
+
+        } catch (Exception e) {
+            log.error("Google authentication failed", e);
+            throw new ApiException(ErrorCode.UNAUTHENTICATED);
+        }
     }
 }
