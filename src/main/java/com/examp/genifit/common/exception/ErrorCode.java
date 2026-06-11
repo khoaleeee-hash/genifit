@@ -34,7 +34,11 @@ public enum ErrorCode {
 
     INVALID_WEIGHT_PROGRESS_CONFIG(HttpStatus.BAD_REQUEST, "WP_002", "Invalid weight progress configuration"),
 
-    INVALID_WEIGHT_VALUE(HttpStatus.BAD_REQUEST, "WP_003", "Invalid weight value");
+    INVALID_WEIGHT_VALUE(HttpStatus.BAD_REQUEST, "WP_003", "Invalid weight value"),
+
+    INVALID_OTP(HttpStatus.BAD_REQUEST, "OTP_001", "Invalid OTP code"),
+
+    OTP_EXPIRED(HttpStatus.BAD_REQUEST, "OTP_002", "OTP code has expired");
 
     private final HttpStatus status;
     private final String code;

@@ -12,10 +12,7 @@ import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/users")
@@ -24,12 +21,20 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "User")
 public class UserController {
     UserService userService;
-    private final GeminiMealSuggestionService geminiMealSuggestionService;
+    GeminiMealSuggestionService geminiMealSuggestionService;
+
+    @PostMapping("/send-otp")
+    public ApiResponse<String> sendOtp(@RequestParam String email) {
+        userService.generateAndSendOtp(email);
+        return ApiResponse.success(
+                "OTP send successfully! Check your mailbox!",
+                email);
+    }
 
     @PostMapping("/register")
     public ApiResponse<UserResponse> createUser(@RequestBody @Valid CreateUserRequest request) {
         return ApiResponse.success(
-                "Create user successfully",
+                "Register successfully",
                 userService.createUser(request)
         );
     }
@@ -40,5 +45,4 @@ public class UserController {
     ) {
         return geminiMealSuggestionService.suggestMealsFromIngredients(request);
     }
-
 }
