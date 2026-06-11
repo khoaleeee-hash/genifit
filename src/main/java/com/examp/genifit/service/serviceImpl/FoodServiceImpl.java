@@ -3,6 +3,8 @@ package com.examp.genifit.service.serviceImpl;
 import com.examp.genifit.dto.request.CreateAdminFoodRequest;
 import com.examp.genifit.dto.request.UpdateFoodRequest;
 import com.examp.genifit.dto.response.FoodResponse;
+import com.examp.genifit.dto.response.PageInfoResponse;
+import com.examp.genifit.dto.response.PageResponse;
 import com.examp.genifit.entity.FoodApprovalStatus;
 import com.examp.genifit.entity.FoodItem;
 import com.examp.genifit.entity.User;
@@ -11,9 +13,11 @@ import com.examp.genifit.repository.FoodItemRepository;
 import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.service.FoodService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -23,26 +27,31 @@ public class FoodServiceImpl implements FoodService {
     private final UserRepository userRepository;
 
     @Override
-    public List<FoodResponse> getAllFoods() {
-        return foodItemRepository
-                .findByIsPublicTrueAndApprovalStatus(FoodApprovalStatus.APPROVED)
-                .stream()
-                .map(FoodResponse::new)
-                .toList();
+    public PageResponse<FoodResponse> getAllFoods(int pageNum, int pageSize) {
+        Pageable pageable = buildPageable(pageNum, pageSize);
+
+        Page<FoodResponse> foodPage = foodItemRepository.findAll(pageable)
+                .map(FoodResponse::new);
+
+        return buildPageResponse(foodPage);
     }
 
     @Override
-    public List<FoodResponse> searchFoods(String keyword) {
+    public PageResponse<FoodResponse> searchFoods(String keyword, int pageNum, int pageSize) {
+        Pageable pageable = buildPageable(pageNum, pageSize);
+
+        Page<FoodResponse> foodPage;
+
         if (keyword == null || keyword.trim().isEmpty()) {
-            return getAllFoods();
+            foodPage = foodItemRepository.findAll(pageable)
+                    .map(FoodResponse::new);
+        } else {
+            foodPage = foodItemRepository
+                    .findByFoodNameContainingIgnoreCase(keyword.trim(), pageable)
+                    .map(FoodResponse::new);
         }
 
-        return foodItemRepository.findByFoodNameContainingIgnoreCase(keyword.trim())
-                .stream()
-                .filter(food -> Boolean.TRUE.equals(food.getIsPublic()))
-                .filter(food -> food.getApprovalStatus() == FoodApprovalStatus.APPROVED)
-                .map(FoodResponse::new)
-                .toList();
+        return buildPageResponse(foodPage);
     }
 
     @Override
@@ -172,5 +181,38 @@ public class FoodServiceImpl implements FoodService {
         if (request.getFat() != null && request.getFat() < 0) {
             throw new RuntimeException("Fat không hợp lệ");
         }
+    }
+
+    private Pageable buildPageable(int pageNum, int pageSize) {
+        if (pageNum <= 0) {
+            pageNum = 1;
+        }
+
+        if (pageSize <= 0) {
+            pageSize = 10;
+        }
+
+        if (pageSize > 50) {
+            pageSize = 50;
+        }
+
+        int springPageIndex = pageNum - 1;
+
+        return PageRequest.of(
+                springPageIndex,
+                pageSize,
+                Sort.by(Sort.Direction.ASC, "foodId")
+        );
+    }
+    private PageResponse<FoodResponse> buildPageResponse(Page<FoodResponse> page) {
+        PageInfoResponse pageInfo = new PageInfoResponse(
+                page.getNumber() + 1,
+                page.getSize()
+        );
+
+        return new PageResponse<>(
+                page.getContent(),
+                pageInfo
+        );
     }
 }
