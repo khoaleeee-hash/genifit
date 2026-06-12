@@ -5,7 +5,6 @@ import lombok.Setter;
 
 @Getter
 @Setter
-public class FoodSearchRequest {
-    private String keyword;
-    private PageInfoRequest pageInfo;
+public class ToggleMealReminderRequest {
+    private Boolean enabled;
 }
