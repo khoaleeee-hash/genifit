@@ -12,12 +12,14 @@ import com.nimbusds.jose.JOSEException;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.text.ParseException;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -57,5 +59,12 @@ public class AuthenticationController {
             throws ParseException, JOSEException {
         authenticationService.logout(request);
         return ApiResponse.success("Logged out successfully!", null);
+    }
+
+    @PostMapping("/google")
+    public ApiResponse<AuthenticationResponse> loginWithGoogle(@RequestBody Map<String, String> request) {
+        String idTokenString = request.get("idToken");
+        AuthenticationResponse response = authenticationService.authenticateWithGoogle(idTokenString);
+        return ApiResponse.success("Logged in Successfully!", response);
     }
 }

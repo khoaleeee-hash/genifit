@@ -19,4 +19,6 @@ public class CreateUserRequest {
 
     @NotNull
     String email;
+
+    String otpCode;
 }
