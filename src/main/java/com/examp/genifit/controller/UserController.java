@@ -58,19 +58,6 @@ public class UserController {
     }
 
     @Operation(
-            summary = "Admin gán gói đăng ký cho user"
-    )
-    @PostMapping("/admin/assign")
-    public ApiResponse<UserSubscriptionResponse> assignSubscription(
-            @RequestBody AssignSubscriptionRequest request
-    ) {
-        return ApiResponse.success(
-                "Assign subscription successfully",
-                userService.assignSubscription(request)
-        );
-    }
-
-    @Operation(
             summary = "Lấy gói đăng ký hiện tại của tôi"
     )
     @GetMapping("/my-active")
