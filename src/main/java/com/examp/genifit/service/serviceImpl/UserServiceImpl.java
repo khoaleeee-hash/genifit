@@ -2,20 +2,24 @@ package com.examp.genifit.service.serviceImpl;
 
 import com.examp.genifit.common.exception.ApiException;
 import com.examp.genifit.common.exception.ErrorCode;
+import com.examp.genifit.dto.request.AssignSubscriptionRequest;
 import com.examp.genifit.dto.request.CreateUserRequest;
 import com.examp.genifit.dto.response.UserResponse;
-import com.examp.genifit.entity.OtpToken;
-import com.examp.genifit.entity.User;
-import com.examp.genifit.entity.UserRole;
+import com.examp.genifit.dto.response.UserSubscriptionResponse;
+import com.examp.genifit.entity.*;
 import com.examp.genifit.mapper.UserMapper;
 import com.examp.genifit.repository.OtpTokenRepository;
+import com.examp.genifit.repository.SubscriptionPlanRepository;
 import com.examp.genifit.repository.UserRepository;
+import com.examp.genifit.repository.UserSubscriptionRepository;
 import com.examp.genifit.service.EmailService;
 import com.examp.genifit.service.UserService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +33,10 @@ import java.util.Random;
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class UserServiceImpl implements UserService {
+
+    private final UserSubscriptionRepository userSubscriptionRepository;
+    private final SubscriptionPlanRepository subscriptionPlanRepository;
+
     UserRepository userRepository;
     OtpTokenRepository otpTokenRepository;
     UserMapper userMapper;
@@ -78,6 +86,114 @@ public class UserServiceImpl implements UserService {
         otpTokenRepository.delete(validOtp);
 
         return userMapper.toUserResponse(user);
+    }
+
+    @Override
+    public UserSubscriptionResponse assignSubscription(AssignSubscriptionRequest request) {
+        if (request == null || request.getUserId() == null || request.getPlanId() == null) {
+            throw new ApiException(ErrorCode.INVALID_SUBSCRIPTION_REQUEST);
+        }
+
+        User user = userRepository.findById(request.getUserId())
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+
+        SubscriptionPlan plan = subscriptionPlanRepository.findById(request.getPlanId())
+                .orElseThrow(() -> new ApiException(ErrorCode.SUBSCRIPTION_PLAN_NOT_FOUND));
+
+        if (plan.getActive() == null || !plan.getActive()) {
+            throw new ApiException(ErrorCode.SUBSCRIPTION_PLAN_INACTIVE);
+        }
+
+        userSubscriptionRepository
+                .findFirstByUserAndStatusOrderByEndDateDesc(user, SubscriptionStatus.ACTIVE)
+                .ifPresent(oldSubscription -> {
+                    oldSubscription.setStatus(SubscriptionStatus.CANCELLED);
+                    oldSubscription.setCancelledAt(LocalDateTime.now());
+                    userSubscriptionRepository.save(oldSubscription);
+                });
+
+        LocalDateTime startDate = LocalDateTime.now();
+        LocalDateTime endDate = startDate.plusDays(plan.getDurationDays());
+
+        UserSubscription subscription = UserSubscription.builder()
+                .user(user)
+                .subscriptionPlan(plan)
+                .startDate(startDate)
+                .endDate(endDate)
+                .status(SubscriptionStatus.ACTIVE)
+                .autoRenew(request.getAutoRenew() == null ? false : request.getAutoRenew())
+                .build();
+
+        UserSubscription savedSubscription = userSubscriptionRepository.save(subscription);
+
+        return new UserSubscriptionResponse(savedSubscription);
+    }
+
+    @Override
+    public UserSubscriptionResponse getMyActiveSubscription() {
+        User currentUser = getCurrentUser();
+
+        UserSubscription subscription = userSubscriptionRepository
+                .findFirstByUserAndStatusOrderByEndDateDesc(
+                        currentUser,
+                        SubscriptionStatus.ACTIVE
+                )
+                .orElseThrow(() -> new ApiException(ErrorCode.ACTIVE_SUBSCRIPTION_NOT_FOUND));
+
+        if (subscription.getEndDate().isBefore(LocalDateTime.now())) {
+            subscription.setStatus(SubscriptionStatus.EXPIRED);
+            userSubscriptionRepository.save(subscription);
+
+            throw new ApiException(ErrorCode.ACTIVE_SUBSCRIPTION_NOT_FOUND);
+        }
+
+        return new UserSubscriptionResponse(subscription);
+    }
+
+    @Override
+    public List<UserSubscriptionResponse> getMySubscriptionHistory() {
+        User currentUser = getCurrentUser();
+
+        return userSubscriptionRepository.findByUserOrderByCreatedAtDesc(currentUser)
+                .stream()
+                .map(UserSubscriptionResponse::new)
+                .toList();
+    }
+
+    @Override
+    public void cancelMySubscription() {
+        User currentUser = getCurrentUser();
+
+        UserSubscription subscription = userSubscriptionRepository
+                .findFirstByUserAndStatusOrderByEndDateDesc(
+                        currentUser,
+                        SubscriptionStatus.ACTIVE
+                )
+                .orElseThrow(() -> new ApiException(ErrorCode.ACTIVE_SUBSCRIPTION_NOT_FOUND));
+
+        subscription.setStatus(SubscriptionStatus.CANCELLED);
+        subscription.setCancelledAt(LocalDateTime.now());
+
+        userSubscriptionRepository.save(subscription);
+    }
+
+    private User getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ApiException(ErrorCode.UNAUTHENTICATED);
+        }
+
+        Object principal = authentication.getPrincipal();
+
+        if (principal == null || principal.equals("anonymousUser")) {
+            throw new ApiException(ErrorCode.UNAUTHENTICATED);
+        }
+
+        String username = authentication.getName();
+
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
     }
 
     @Override

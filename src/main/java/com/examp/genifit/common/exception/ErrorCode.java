@@ -38,7 +38,19 @@ public enum ErrorCode {
 
     INVALID_OTP(HttpStatus.BAD_REQUEST, "OTP_001", "Invalid OTP code"),
 
-    OTP_EXPIRED(HttpStatus.BAD_REQUEST, "OTP_002", "OTP code has expired");
+    OTP_EXPIRED(HttpStatus.BAD_REQUEST, "OTP_002", "OTP code has expired"),
+
+    SUBSCRIPTION_PLAN_NOT_FOUND(HttpStatus.NOT_FOUND, "SUB_PLAN_001", "Subscription plan not found"),
+
+    SUBSCRIPTION_PLAN_EXISTED(HttpStatus.BAD_REQUEST, "SUB_PLAN_002", "Subscription plan already existed"),
+
+    SUBSCRIPTION_NOT_FOUND(HttpStatus.NOT_FOUND, "SUB_001", "Subscription not found"),
+
+    ACTIVE_SUBSCRIPTION_NOT_FOUND(HttpStatus.NOT_FOUND, "SUB_002", "Active subscription not found"),
+
+    SUBSCRIPTION_PLAN_INACTIVE(HttpStatus.BAD_REQUEST, "SUB_PLAN_003", "Subscription plan is inactive"),
+
+    INVALID_SUBSCRIPTION_REQUEST(HttpStatus.BAD_REQUEST, "SUB_003", "Invalid subscription request");
 
     private final HttpStatus status;
     private final String code;
