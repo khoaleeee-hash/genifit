@@ -21,6 +21,7 @@ public interface AuthenticationService {
     AuthenticationResponse refreshToken(RefreshTokenRequest request) throws ParseException, JOSEException;
     void invalidateToken(String token) throws ParseException, JOSEException;
     SignedJWT verifyToken(String token) throws JOSEException, ParseException;;
+    AuthenticationResponse authenticateWithGoogle(String idTokenString);
 //    AuthenticationResponse refreshToken(RefreshRequest request);
 
 }
