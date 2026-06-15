@@ -1,7 +1,7 @@
 package com.examp.genifit.service.serviceImpl;
 
 import com.examp.genifit.dto.response.ChatHistoryResponse;
-import com.examp.genifit.dto.response.ChatMessageDto;
+import com.examp.genifit.dto.response.ChatHistoryResponse.ChatMessageDto;
 import com.examp.genifit.entity.AIChatHistory;
 import com.examp.genifit.entity.User;
 import com.examp.genifit.repository.AIChatHistoryRepository;
