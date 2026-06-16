@@ -30,7 +30,7 @@ public class FoodServiceImpl implements FoodService {
     public PageResponse<FoodResponse> getAllFoods(int pageNum, int pageSize) {
         Pageable pageable = buildPageable(pageNum, pageSize);
 
-        Page<FoodResponse> foodPage = foodItemRepository.findAll(pageable)
+        Page<FoodResponse> foodPage = foodItemRepository.findByDeletedFalse(pageable)
                 .map(FoodResponse::new);
 
         return buildPageResponse(foodPage);
@@ -43,11 +43,11 @@ public class FoodServiceImpl implements FoodService {
         Page<FoodResponse> foodPage;
 
         if (keyword == null || keyword.trim().isEmpty()) {
-            foodPage = foodItemRepository.findAll(pageable)
+            foodPage = foodItemRepository.findByDeletedFalse(pageable)
                     .map(FoodResponse::new);
         } else {
             foodPage = foodItemRepository
-                    .findByFoodNameContainingIgnoreCase(keyword.trim(), pageable)
+                    .findByFoodNameContainingIgnoreCaseAndDeletedFalse(keyword.trim(), pageable)
                     .map(FoodResponse::new);
         }
 
@@ -66,7 +66,7 @@ public class FoodServiceImpl implements FoodService {
         }
 
         foodItemRepository
-                .findByFoodNameIgnoreCaseAndIsPublicTrueAndApprovalStatus(
+                .findByFoodNameIgnoreCaseAndIsPublicTrueAndApprovalStatusAndDeletedFalse(
                         request.getFoodName().trim(),
                         FoodApprovalStatus.APPROVED
                 )
@@ -93,7 +93,8 @@ public class FoodServiceImpl implements FoodService {
 
     @Override
     public FoodResponse updateFood(Integer foodId, UpdateFoodRequest request) {
-        FoodItem foodItem = foodItemRepository.findById(foodId)
+
+        FoodItem foodItem = foodItemRepository.findByFoodIdAndDeletedFalse(foodId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn"));
 
         validateUpdateFood(request);
@@ -139,8 +140,14 @@ public class FoodServiceImpl implements FoodService {
     public void softDeleteFood(Integer foodId) {
         FoodItem foodItem = foodItemRepository.findById(foodId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn"));
+
+        if (Boolean.TRUE.equals(foodItem.getDeleted())) {
+            throw new RuntimeException("Món ăn này đã được xoá trước đó");
+        }
+
+        foodItem.setDeleted(true);
         foodItem.setIsPublic(false);
-        foodItem.setApprovalStatus(FoodApprovalStatus.REJECTED);
+
         foodItemRepository.save(foodItem);
     }
 
@@ -148,18 +155,23 @@ public class FoodServiceImpl implements FoodService {
         if (request.getAdminId() == null) {
             throw new RuntimeException("AdminId không được để trống");
         }
+
         if (request.getFoodName() == null || request.getFoodName().trim().isEmpty()) {
             throw new RuntimeException("Tên món ăn không được để trống");
         }
+
         if (request.getCalories() == null || request.getCalories() < 0) {
             throw new RuntimeException("Calories không hợp lệ");
         }
+
         if (request.getProtein() != null && request.getProtein() < 0) {
             throw new RuntimeException("Protein không hợp lệ");
         }
+
         if (request.getCarbs() != null && request.getCarbs() < 0) {
             throw new RuntimeException("Carbs không hợp lệ");
         }
+
         if (request.getFat() != null && request.getFat() < 0) {
             throw new RuntimeException("Fat không hợp lệ");
         }
@@ -204,6 +216,7 @@ public class FoodServiceImpl implements FoodService {
                 Sort.by(Sort.Direction.ASC, "foodId")
         );
     }
+
     private PageResponse<FoodResponse> buildPageResponse(Page<FoodResponse> page) {
         PageInfoResponse pageInfo = new PageInfoResponse(
                 page.getNumber() + 1,

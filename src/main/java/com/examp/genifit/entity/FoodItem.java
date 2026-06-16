@@ -38,7 +38,11 @@ public class FoodItem {
     @JoinColumn(name = "created_by")
     private User createdBy;
 
+    @Column(columnDefinition = "TINYINT(1) DEFAULT 0")
     private Boolean isPublic;
+
+    @Column(columnDefinition = "TINYINT(1) DEFAULT 0")
+    private Boolean deleted;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 30)
@@ -55,6 +59,10 @@ public class FoodItem {
 
         if (isPublic == null) {
             isPublic = false;
+        }
+
+        if (deleted == null) {
+            deleted = false;
         }
 
         if (approvalStatus == null) {
