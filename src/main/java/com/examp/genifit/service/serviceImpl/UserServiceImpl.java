@@ -63,7 +63,7 @@ public class UserServiceImpl implements UserService {
             throw new ApiException(ErrorCode.USER_EXISTED);
         }
 
-        OtpToken validOtp = otpTokenRepository.findByEmailAndOtpCode(request.getUsername(), request.getOtpCode())
+        OtpToken validOtp = otpTokenRepository.findByEmailAndOtpCode(request.getEmail(), request.getOtpCode())
                 .orElseThrow(() -> new ApiException(ErrorCode.INVALID_OTP));
 
         if (validOtp.getExpiryTime().isBefore(LocalDateTime.now())) {
