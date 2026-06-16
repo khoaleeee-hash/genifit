@@ -3,12 +3,12 @@ package com.examp.genifit.service;
 import com.examp.genifit.dto.request.CreateAdminFoodRequest;
 import com.examp.genifit.dto.request.UpdateFoodRequest;
 import com.examp.genifit.dto.response.FoodResponse;
-import org.springframework.data.domain.Page;
+import com.examp.genifit.dto.response.PageResponse;
 
 public interface FoodService {
 
-    Page<FoodResponse> getAllFoods(Integer pageNum, Integer pageSize);
-    Page<FoodResponse> searchFoods(String keyword, Integer pageNum, Integer pageSize);
+    PageResponse<FoodResponse> getAllFoods(int pageNum, int pageSize);
+    PageResponse<FoodResponse> searchFoods(String keyword, int pageNum, int pageSize);
     FoodResponse createFoodByAdmin(CreateAdminFoodRequest request);
     FoodResponse updateFood(Integer foodId, UpdateFoodRequest request);
     void softDeleteFood(Integer foodId);

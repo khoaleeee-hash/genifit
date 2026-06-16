@@ -3,6 +3,8 @@ package com.examp.genifit.service.serviceImpl;
 import com.examp.genifit.dto.request.CreateAdminFoodRequest;
 import com.examp.genifit.dto.request.UpdateFoodRequest;
 import com.examp.genifit.dto.response.FoodResponse;
+import com.examp.genifit.dto.response.PageInfoResponse;
+import com.examp.genifit.dto.response.PageResponse;
 import com.examp.genifit.entity.FoodApprovalStatus;
 import com.examp.genifit.entity.FoodItem;
 import com.examp.genifit.entity.User;
@@ -25,25 +27,31 @@ public class FoodServiceImpl implements FoodService {
     private final UserRepository userRepository;
 
     @Override
-    public Page<FoodResponse> getAllFoods(Integer pageNum, Integer pageSize) {
+    public PageResponse<FoodResponse> getAllFoods(int pageNum, int pageSize) {
         Pageable pageable = buildPageable(pageNum, pageSize);
 
-        return foodItemRepository.findByDeletedFalse(pageable)
+        Page<FoodResponse> foodPage = foodItemRepository.findByDeletedFalse(pageable)
                 .map(FoodResponse::new);
+
+        return buildPageResponse(foodPage);
     }
 
     @Override
-    public Page<FoodResponse> searchFoods(String keyword, Integer pageNum, Integer pageSize) {
+    public PageResponse<FoodResponse> searchFoods(String keyword, int pageNum, int pageSize) {
         Pageable pageable = buildPageable(pageNum, pageSize);
 
+        Page<FoodResponse> foodPage;
+
         if (keyword == null || keyword.trim().isEmpty()) {
-            return foodItemRepository.findAll(pageable)
+            foodPage = foodItemRepository.findByDeletedFalse(pageable)
+                    .map(FoodResponse::new);
+        } else {
+            foodPage = foodItemRepository
+                    .findByFoodNameContainingIgnoreCaseAndDeletedFalse(keyword.trim(), pageable)
                     .map(FoodResponse::new);
         }
 
-        return foodItemRepository
-                .findByFoodNameContainingIgnoreCaseAndDeletedFalse(keyword.trim(), pageable)
-                .map(FoodResponse::new);
+        return buildPageResponse(foodPage);
     }
 
     @Override
@@ -85,7 +93,8 @@ public class FoodServiceImpl implements FoodService {
 
     @Override
     public FoodResponse updateFood(Integer foodId, UpdateFoodRequest request) {
-        FoodItem foodItem = foodItemRepository.findById(foodId)
+
+        FoodItem foodItem = foodItemRepository.findByFoodIdAndDeletedFalse(foodId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn"));
 
         validateUpdateFood(request);
@@ -132,7 +141,7 @@ public class FoodServiceImpl implements FoodService {
         FoodItem foodItem = foodItemRepository.findById(foodId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn"));
 
-        if(Boolean.TRUE.equals(foodItem.getDeleted())){
+        if (Boolean.TRUE.equals(foodItem.getDeleted())) {
             throw new RuntimeException("Món ăn này đã được xoá trước đó");
         }
 
@@ -186,12 +195,12 @@ public class FoodServiceImpl implements FoodService {
         }
     }
 
-    private Pageable buildPageable(Integer pageNum, Integer pageSize) {
-        if (pageNum == null || pageNum < 0) {
-            pageNum = 0;
+    private Pageable buildPageable(int pageNum, int pageSize) {
+        if (pageNum <= 0) {
+            pageNum = 1;
         }
 
-        if (pageSize == null || pageSize <= 0) {
+        if (pageSize <= 0) {
             pageSize = 10;
         }
 
@@ -199,10 +208,24 @@ public class FoodServiceImpl implements FoodService {
             pageSize = 50;
         }
 
+        int springPageIndex = pageNum - 1;
+
         return PageRequest.of(
-                pageNum,
+                springPageIndex,
                 pageSize,
                 Sort.by(Sort.Direction.ASC, "foodId")
+        );
+    }
+
+    private PageResponse<FoodResponse> buildPageResponse(Page<FoodResponse> page) {
+        PageInfoResponse pageInfo = new PageInfoResponse(
+                page.getNumber() + 1,
+                page.getSize()
+        );
+
+        return new PageResponse<>(
+                page.getContent(),
+                pageInfo
         );
     }
 }

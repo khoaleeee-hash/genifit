@@ -18,6 +18,10 @@ public interface FoodItemRepository extends JpaRepository<FoodItem, Integer> {
             Pageable pageable
     );
 
+    Optional<FoodItem> findByFoodIdAndDeletedFalse(
+            Integer foodId
+    );
+
     Optional<FoodItem> findByFoodNameIgnoreCaseAndDeletedFalse(
             String foodName
     );
