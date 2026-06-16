@@ -1,13 +1,16 @@
 package com.examp.genifit.controller;
 
-import com.examp.genifit.dto.request.FoodPagingRequest;
-import com.examp.genifit.dto.request.FoodSearchRequest;
+import com.examp.genifit.common.response.ApiResponse;
 import com.examp.genifit.dto.response.FoodResponse;
-import com.examp.genifit.dto.response.PageResponse;
 import com.examp.genifit.service.FoodService;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/foods")
@@ -17,48 +20,35 @@ public class FoodController {
 
     private final FoodService foodService;
 
-    @PostMapping("/get-all")
-    public PageResponse<FoodResponse> getAllFoods(
-            @RequestBody(required = false) FoodPagingRequest request
+    @Operation(
+            summary = "Lấy danh sách tất cả food"
+    )
+    @GetMapping("/get-all")
+    public ResponseEntity<ApiResponse<List<FoodResponse>>> getAllFoods(
+            @RequestParam(defaultValue = "0") Integer pageNum,
+            @RequestParam(defaultValue = "10") Integer pageSize
     ) {
-        int pageNum = 1;
-        int pageSize = 10;
+        Page<FoodResponse> page = foodService.getAllFoods(pageNum, pageSize);
 
-        if (request != null && request.getPageInfo() != null) {
-            if (request.getPageInfo().getPageNum() != null) {
-                pageNum = request.getPageInfo().getPageNum();
-            }
-
-            if (request.getPageInfo().getPageSize() != null) {
-                pageSize = request.getPageInfo().getPageSize();
-            }
-        }
-
-        return foodService.getAllFoods(pageNum, pageSize);
+        return ResponseEntity.ok(
+                ApiResponse.successPage("Get all foods successfully", page)
+        );
     }
 
-    @PostMapping("/search")
-    public PageResponse<FoodResponse> searchFoods(
-            @RequestBody(required = false) FoodSearchRequest request
+    @Operation(
+            summary = "Tìm kiếm thức ăn"
+    )
+    @GetMapping("/search")
+    public ResponseEntity<ApiResponse<List<FoodResponse>>> searchFoods(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") Integer pageNum,
+            @RequestParam(defaultValue = "10") Integer pageSize
     ) {
-        String keyword = null;
-        int pageNum = 1;
-        int pageSize = 10;
+        Page<FoodResponse> page = foodService.searchFoods(keyword, pageNum, pageSize);
 
-        if (request != null) {
-            keyword = request.getKeyword();
-
-            if (request.getPageInfo() != null) {
-                if (request.getPageInfo().getPageNum() != null) {
-                    pageNum = request.getPageInfo().getPageNum();
-                }
-
-                if (request.getPageInfo().getPageSize() != null) {
-                    pageSize = request.getPageInfo().getPageSize();
-                }
-            }
-        }
-
-        return foodService.searchFoods(keyword, pageNum, pageSize);
+        return ResponseEntity.ok(
+                ApiResponse.successPage("Search foods successfully", page)
+        );
     }
+
 }

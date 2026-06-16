@@ -40,6 +40,8 @@ public class FoodItem {
 
     private Boolean isPublic;
 
+    private Boolean deleted;
+
     @Enumerated(EnumType.STRING)
     @Column(length = 30)
     private FoodApprovalStatus approvalStatus;
@@ -55,6 +57,10 @@ public class FoodItem {
 
         if (isPublic == null) {
             isPublic = false;
+        }
+
+        if (deleted == null) {
+            deleted = false;
         }
 
         if (approvalStatus == null) {

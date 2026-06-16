@@ -3,8 +3,6 @@ package com.examp.genifit.service.serviceImpl;
 import com.examp.genifit.dto.request.CreateAdminFoodRequest;
 import com.examp.genifit.dto.request.UpdateFoodRequest;
 import com.examp.genifit.dto.response.FoodResponse;
-import com.examp.genifit.dto.response.PageInfoResponse;
-import com.examp.genifit.dto.response.PageResponse;
 import com.examp.genifit.entity.FoodApprovalStatus;
 import com.examp.genifit.entity.FoodItem;
 import com.examp.genifit.entity.User;
@@ -27,31 +25,25 @@ public class FoodServiceImpl implements FoodService {
     private final UserRepository userRepository;
 
     @Override
-    public PageResponse<FoodResponse> getAllFoods(int pageNum, int pageSize) {
+    public Page<FoodResponse> getAllFoods(Integer pageNum, Integer pageSize) {
         Pageable pageable = buildPageable(pageNum, pageSize);
 
-        Page<FoodResponse> foodPage = foodItemRepository.findAll(pageable)
+        return foodItemRepository.findByDeletedFalse(pageable)
                 .map(FoodResponse::new);
-
-        return buildPageResponse(foodPage);
     }
 
     @Override
-    public PageResponse<FoodResponse> searchFoods(String keyword, int pageNum, int pageSize) {
+    public Page<FoodResponse> searchFoods(String keyword, Integer pageNum, Integer pageSize) {
         Pageable pageable = buildPageable(pageNum, pageSize);
 
-        Page<FoodResponse> foodPage;
-
         if (keyword == null || keyword.trim().isEmpty()) {
-            foodPage = foodItemRepository.findAll(pageable)
-                    .map(FoodResponse::new);
-        } else {
-            foodPage = foodItemRepository
-                    .findByFoodNameContainingIgnoreCase(keyword.trim(), pageable)
+            return foodItemRepository.findAll(pageable)
                     .map(FoodResponse::new);
         }
 
-        return buildPageResponse(foodPage);
+        return foodItemRepository
+                .findByFoodNameContainingIgnoreCaseAndDeletedFalse(keyword.trim(), pageable)
+                .map(FoodResponse::new);
     }
 
     @Override
@@ -66,7 +58,7 @@ public class FoodServiceImpl implements FoodService {
         }
 
         foodItemRepository
-                .findByFoodNameIgnoreCaseAndIsPublicTrueAndApprovalStatus(
+                .findByFoodNameIgnoreCaseAndIsPublicTrueAndApprovalStatusAndDeletedFalse(
                         request.getFoodName().trim(),
                         FoodApprovalStatus.APPROVED
                 )
@@ -139,8 +131,14 @@ public class FoodServiceImpl implements FoodService {
     public void softDeleteFood(Integer foodId) {
         FoodItem foodItem = foodItemRepository.findById(foodId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn"));
+
+        if(Boolean.TRUE.equals(foodItem.getDeleted())){
+            throw new RuntimeException("Món ăn này đã được xoá trước đó");
+        }
+
+        foodItem.setDeleted(true);
         foodItem.setIsPublic(false);
-        foodItem.setApprovalStatus(FoodApprovalStatus.REJECTED);
+
         foodItemRepository.save(foodItem);
     }
 
@@ -148,18 +146,23 @@ public class FoodServiceImpl implements FoodService {
         if (request.getAdminId() == null) {
             throw new RuntimeException("AdminId không được để trống");
         }
+
         if (request.getFoodName() == null || request.getFoodName().trim().isEmpty()) {
             throw new RuntimeException("Tên món ăn không được để trống");
         }
+
         if (request.getCalories() == null || request.getCalories() < 0) {
             throw new RuntimeException("Calories không hợp lệ");
         }
+
         if (request.getProtein() != null && request.getProtein() < 0) {
             throw new RuntimeException("Protein không hợp lệ");
         }
+
         if (request.getCarbs() != null && request.getCarbs() < 0) {
             throw new RuntimeException("Carbs không hợp lệ");
         }
+
         if (request.getFat() != null && request.getFat() < 0) {
             throw new RuntimeException("Fat không hợp lệ");
         }
@@ -183,12 +186,12 @@ public class FoodServiceImpl implements FoodService {
         }
     }
 
-    private Pageable buildPageable(int pageNum, int pageSize) {
-        if (pageNum <= 0) {
-            pageNum = 1;
+    private Pageable buildPageable(Integer pageNum, Integer pageSize) {
+        if (pageNum == null || pageNum < 0) {
+            pageNum = 0;
         }
 
-        if (pageSize <= 0) {
+        if (pageSize == null || pageSize <= 0) {
             pageSize = 10;
         }
 
@@ -196,23 +199,10 @@ public class FoodServiceImpl implements FoodService {
             pageSize = 50;
         }
 
-        int springPageIndex = pageNum - 1;
-
         return PageRequest.of(
-                springPageIndex,
+                pageNum,
                 pageSize,
                 Sort.by(Sort.Direction.ASC, "foodId")
-        );
-    }
-    private PageResponse<FoodResponse> buildPageResponse(Page<FoodResponse> page) {
-        PageInfoResponse pageInfo = new PageInfoResponse(
-                page.getNumber() + 1,
-                page.getSize()
-        );
-
-        return new PageResponse<>(
-                page.getContent(),
-                pageInfo
         );
     }
 }

@@ -254,11 +254,12 @@ public class DailyLogServiceImpl implements DailyLogService {
 
         if (request.getFoodId() != null) {
             return foodItemRepository.findById(request.getFoodId())
+                    .filter(food -> !Boolean.TRUE.equals(food.getDeleted()))
                     .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn"));
         }
 
         if (request.getFoodName() != null && !request.getFoodName().trim().isEmpty()) {
-            return foodItemRepository.findByFoodNameIgnoreCase(request.getFoodName().trim())
+            return foodItemRepository.findByFoodNameIgnoreCaseAndDeletedFalse(request.getFoodName().trim())
                     .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn có tên: " + request.getFoodName()));
         }
 

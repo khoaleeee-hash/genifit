@@ -7,10 +7,13 @@ import com.examp.genifit.entity.SubscriptionPlan;
 import com.examp.genifit.repository.SubscriptionPlanRepository;
 import com.examp.genifit.service.SubscriptionPlanService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -19,11 +22,11 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
     private final SubscriptionPlanRepository subscriptionPlanRepository;
 
     @Override
-    public List<SubscriptionPlanResponse> getActivePlans() {
-        return subscriptionPlanRepository.findByActiveTrueOrderByPriceAsc()
-                .stream()
-                .map(SubscriptionPlanResponse::new)
-                .toList();
+    public Page<SubscriptionPlanResponse> getActivePlans(Integer pageNum, Integer pageSize) {
+        Pageable pageable = buildPageable(pageNum, pageSize);
+
+        return subscriptionPlanRepository.findByActiveTrue(pageable)
+                .map(SubscriptionPlanResponse::new);
     }
 
     @Override
@@ -184,10 +187,29 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
         SubscriptionPlan plan = subscriptionPlanRepository.findById(planId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy gói đăng ký"));
 
-        // Xoá mềm, không xoá khỏi database
         plan.setActive(false);
 
         subscriptionPlanRepository.save(plan);
+    }
+
+    private Pageable buildPageable(Integer pageNum, Integer pageSize) {
+        if (pageNum == null || pageNum < 0) {
+            pageNum = 0;
+        }
+
+        if (pageSize == null || pageSize <= 0) {
+            pageSize = 10;
+        }
+
+        if (pageSize > 50) {
+            pageSize = 50;
+        }
+
+        return PageRequest.of(
+                pageNum,
+                pageSize,
+                Sort.by(Sort.Direction.ASC, "price")
+        );
     }
 
     private void validateCreateRequest(CreateSubscriptionPlanRequest request) {

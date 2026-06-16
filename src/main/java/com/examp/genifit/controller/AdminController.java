@@ -22,6 +22,9 @@ public class AdminController {
     private final FoodService foodService;
     private final UserService userService;
 
+    @Operation(
+            summary = "Admin thêm thức ăn"
+    )
     @PostMapping("/foods")
     public FoodResponse createFoodByAdmin(@RequestBody CreateAdminFoodRequest request) {
         return foodService.createFoodByAdmin(request);
@@ -40,6 +43,9 @@ public class AdminController {
         );
     }
 
+    @Operation(
+            summary = "Admin cập nhật/chỉnh sửa thức ăn"
+    )
     @PutMapping("/foods/{foodId}")
     public FoodResponse updateFood(
             @PathVariable Integer foodId,
@@ -48,6 +54,9 @@ public class AdminController {
         return foodService.updateFood(foodId, request);
     }
 
+    @Operation(
+            summary = "Admin xoá mềm thức ăn"
+    )
     @DeleteMapping("/foods/{foodId}")
     public String deleteFood(@PathVariable Integer foodId) {
         foodService.softDeleteFood(foodId);

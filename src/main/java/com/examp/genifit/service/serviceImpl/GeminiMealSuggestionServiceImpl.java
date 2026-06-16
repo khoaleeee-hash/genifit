@@ -101,7 +101,7 @@ public class GeminiMealSuggestionServiceImpl implements GeminiMealSuggestionServ
         double remainingCaloriesToday = targetCalories - currentCaloriesToday;
 
         List<FoodItem> approvedFoods = foodItemRepository
-                .findByIsPublicTrueAndApprovalStatus(FoodApprovalStatus.APPROVED);
+                .findByIsPublicTrueAndApprovalStatusAndDeletedFalse(FoodApprovalStatus.APPROVED);
 
         if (approvedFoods.isEmpty()) {
             throw new RuntimeException("Chưa có món ăn chuẩn đã được admin duyệt trong database");
