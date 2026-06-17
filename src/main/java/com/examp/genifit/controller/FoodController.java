@@ -1,5 +1,6 @@
 package com.examp.genifit.controller;
 
+import com.examp.genifit.dto.request.FoodFilterRequest;
 import com.examp.genifit.dto.request.FoodPagingRequest;
 import com.examp.genifit.dto.request.FoodSearchRequest;
 import com.examp.genifit.dto.response.FoodResponse;
@@ -17,48 +18,29 @@ public class FoodController {
 
     private final FoodService foodService;
 
-    @PostMapping("/get-all")
-    public PageResponse<FoodResponse> getAllFoods(
-            @RequestBody(required = false) FoodPagingRequest request
-    ) {
-        int pageNum = 1;
-        int pageSize = 10;
-
-        if (request != null && request.getPageInfo() != null) {
-            if (request.getPageInfo().getPageNum() != null) {
-                pageNum = request.getPageInfo().getPageNum();
-            }
-
-            if (request.getPageInfo().getPageSize() != null) {
-                pageSize = request.getPageInfo().getPageSize();
-            }
-        }
-
-        return foodService.getAllFoods(pageNum, pageSize);
-    }
-
+//    @PostMapping("/get-all")
+//    public PageResponse<FoodResponse> getAllFoods(
+//            @RequestBody(required = false) FoodPagingRequest request
+//    ) {
+//        int pageNum = 1;
+//        int pageSize = 10;
+//
+//        if (request != null && request.getPageInfo() != null) {
+//            if (request.getPageInfo().getPageNum() != null) {
+//                pageNum = request.getPageInfo().getPageNum();
+//            }
+//
+//            if (request.getPageInfo().getPageSize() != null) {
+//                pageSize = request.getPageInfo().getPageSize();
+//            }
+//        }
+//
+//        return foodService.getAllFoods(pageNum, pageSize);
+//    }
     @PostMapping("/search")
-    public PageResponse<FoodResponse> searchFoods(
-            @RequestBody(required = false) FoodSearchRequest request
+    public PageResponse<FoodResponse> filterFoods(
+            @RequestBody(required = false) FoodFilterRequest request
     ) {
-        String keyword = null;
-        int pageNum = 1;
-        int pageSize = 10;
-
-        if (request != null) {
-            keyword = request.getKeyword();
-
-            if (request.getPageInfo() != null) {
-                if (request.getPageInfo().getPageNum() != null) {
-                    pageNum = request.getPageInfo().getPageNum();
-                }
-
-                if (request.getPageInfo().getPageSize() != null) {
-                    pageSize = request.getPageInfo().getPageSize();
-                }
-            }
-        }
-
-        return foodService.searchFoods(keyword, pageNum, pageSize);
+        return foodService.filterFoods(request);
     }
 }

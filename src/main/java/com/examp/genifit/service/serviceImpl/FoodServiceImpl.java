@@ -1,6 +1,7 @@
 package com.examp.genifit.service.serviceImpl;
 
 import com.examp.genifit.dto.request.CreateAdminFoodRequest;
+import com.examp.genifit.dto.request.FoodFilterRequest;
 import com.examp.genifit.dto.request.UpdateFoodRequest;
 import com.examp.genifit.dto.response.FoodResponse;
 import com.examp.genifit.dto.response.PageInfoResponse;
@@ -26,30 +27,119 @@ public class FoodServiceImpl implements FoodService {
     private final FoodItemRepository foodItemRepository;
     private final UserRepository userRepository;
 
+//    @Override
+//    public PageResponse<FoodResponse> getAllFoods(int pageNum, int pageSize) {
+//        Pageable pageable = buildPageable(pageNum, pageSize);
+//
+//        Page<FoodResponse> foodPage = foodItemRepository.findByDeletedFalse(pageable)
+//                .map(FoodResponse::new);
+//
+//        return buildPageResponse(foodPage);
+//    }
+
+//    @Override
+//    public PageResponse<FoodResponse> searchFoods(String keyword, int pageNum, int pageSize) {
+//        Pageable pageable = buildPageable(pageNum, pageSize);
+//
+//        Page<FoodResponse> foodPage;
+//
+//        if (keyword == null || keyword.trim().isEmpty()) {
+//            foodPage = foodItemRepository.findByDeletedFalse(pageable)
+//                    .map(FoodResponse::new);
+//        } else {
+//            foodPage = foodItemRepository
+//                    .findByFoodNameContainingIgnoreCaseAndDeletedFalse(keyword.trim(), pageable)
+//                    .map(FoodResponse::new);
+//        }
+//
+//        return buildPageResponse(foodPage);
+//    }
+
     @Override
-    public PageResponse<FoodResponse> getAllFoods(int pageNum, int pageSize) {
-        Pageable pageable = buildPageable(pageNum, pageSize);
+    public PageResponse<FoodResponse> filterFoods(FoodFilterRequest request) {
+        int pageNum = 1;
+        int pageSize = 10;
 
-        Page<FoodResponse> foodPage = foodItemRepository.findByDeletedFalse(pageable)
-                .map(FoodResponse::new);
+        FoodFilterRequest.SearchCondition condition = null;
 
-        return buildPageResponse(foodPage);
-    }
+        if (request != null) {
+            condition = request.getSearchCondition();
 
-    @Override
-    public PageResponse<FoodResponse> searchFoods(String keyword, int pageNum, int pageSize) {
-        Pageable pageable = buildPageable(pageNum, pageSize);
+            if (request.getPageInfo() != null) {
+                if (request.getPageInfo().getPageNum() != null) {
+                    pageNum = request.getPageInfo().getPageNum();
+                }
 
-        Page<FoodResponse> foodPage;
-
-        if (keyword == null || keyword.trim().isEmpty()) {
-            foodPage = foodItemRepository.findByDeletedFalse(pageable)
-                    .map(FoodResponse::new);
-        } else {
-            foodPage = foodItemRepository
-                    .findByFoodNameContainingIgnoreCaseAndDeletedFalse(keyword.trim(), pageable)
-                    .map(FoodResponse::new);
+                if (request.getPageInfo().getPageSize() != null) {
+                    pageSize = request.getPageInfo().getPageSize();
+                }
+            }
         }
+
+        Pageable pageable = buildPageable(pageNum, pageSize);
+
+        Integer foodId = null;
+        String keyword = null;
+
+        Double calories = null;
+        Double caloriesFrom = null;
+        Double caloriesTo = null;
+
+        Double proteinFrom = null;
+        Double proteinTo = null;
+        Double carbsFrom = null;
+        Double carbsTo = null;
+        Double fatFrom = null;
+        Double fatTo = null;
+
+        Boolean isPublic = null;
+        Boolean isDeleted = false;
+
+        if (condition != null) {
+            foodId = condition.getFoodId();
+
+            if (condition.getKeyword() != null && !condition.getKeyword().trim().isEmpty()) {
+                keyword = condition.getKeyword().trim();
+            }
+
+            calories = condition.getCalories();
+            caloriesFrom = condition.getCaloriesFrom();
+            caloriesTo = condition.getCaloriesTo();
+
+            proteinFrom = condition.getProteinFrom();
+            proteinTo = condition.getProteinTo();
+
+            carbsFrom = condition.getCarbsFrom();
+            carbsTo = condition.getCarbsTo();
+
+            fatFrom = condition.getFatFrom();
+            fatTo = condition.getFatTo();
+
+            isPublic = condition.getIsPublic();
+
+            if (condition.getIsDeleted() != null) {
+                isDeleted = condition.getIsDeleted();
+            }
+        }
+
+        Page<FoodResponse> foodPage = foodItemRepository
+                .filterFoods(
+                        foodId,
+                        keyword,
+                        calories,
+                        caloriesFrom,
+                        caloriesTo,
+                        proteinFrom,
+                        proteinTo,
+                        carbsFrom,
+                        carbsTo,
+                        fatFrom,
+                        fatTo,
+                        isPublic,
+                        isDeleted,
+                        pageable
+                )
+                .map(FoodResponse::new);
 
         return buildPageResponse(foodPage);
     }

@@ -86,7 +86,7 @@ public class SubscriptionPlanController {
     }
 
     @Operation(
-            summary = "Đăng kí gói"
+            summary = "Tạo gói đăng kí"
     )
     @PostMapping
     public ResponseEntity<ApiResponse<SubscriptionPlanResponse>> createPlan(
