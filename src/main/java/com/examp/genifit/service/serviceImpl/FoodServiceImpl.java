@@ -98,7 +98,7 @@ public class FoodServiceImpl implements FoodService {
         if (condition != null) {
             foodId = parseInteger(condition.getFoodId());
 
-            if (condition.getKeyword() != null && !condition.getKeyword().trim().isEmpty()) {
+            if (!isBlankOrSwaggerDefault(condition.getKeyword())) {
                 keyword = condition.getKeyword().trim();
             }
 
@@ -243,7 +243,7 @@ public class FoodServiceImpl implements FoodService {
     }
 
     private Integer parseInteger(String value) {
-        if (value == null || value.trim().isEmpty()) {
+        if (isBlankOrSwaggerDefault(value)) {
             return null;
         }
 
@@ -255,7 +255,7 @@ public class FoodServiceImpl implements FoodService {
     }
 
     private Double parseDouble(String value) {
-        if (value == null || value.trim().isEmpty()) {
+        if (isBlankOrSwaggerDefault(value)) {
             return null;
         }
 
@@ -267,7 +267,7 @@ public class FoodServiceImpl implements FoodService {
     }
 
     private Boolean parseBoolean(String value) {
-        if (value == null || value.trim().isEmpty()) {
+        if (isBlankOrSwaggerDefault(value)) {
             return null;
         }
 
@@ -282,6 +282,12 @@ public class FoodServiceImpl implements FoodService {
         }
 
         throw new RuntimeException("Giá trị boolean không hợp lệ, chỉ được nhập true hoặc false: " + value);
+    }
+
+    private boolean isBlankOrSwaggerDefault(String value) {
+        return value == null
+                || value.trim().isEmpty()
+                || "string".equalsIgnoreCase(value.trim());
     }
 
     private void validateCreateFood(CreateAdminFoodRequest request) {
