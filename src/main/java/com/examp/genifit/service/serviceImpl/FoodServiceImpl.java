@@ -217,15 +217,30 @@ public class FoodServiceImpl implements FoodService {
         );
     }
 
+//    private PageResponse<FoodResponse> buildPageResponse(Page<FoodResponse> page) {
+//        PageInfoResponse pageInfo = new PageInfoResponse(
+//                page.getNumber() + 1,
+//                page.getSize(),
+//                page.getTotalPages(),
+//                page.getTotalElements()
+//        );
+//
+//        return new PageResponse<>(
+//                page.getContent(),
+//                pageInfo
+//        );
+//    }
     private PageResponse<FoodResponse> buildPageResponse(Page<FoodResponse> page) {
-        PageInfoResponse pageInfo = new PageInfoResponse(
-                page.getNumber() + 1,
-                page.getSize()
-        );
+        PageInfoResponse pageInfo = PageInfoResponse.builder()
+                .pageNum(page.getNumber() + 1)
+                .pageSize(page.getSize())
+                .totalPage(page.getTotalPages())
+                .totalItem(page.getTotalElements())
+                .build();
 
         return new PageResponse<>(
                 page.getContent(),
                 pageInfo
         );
-    }
+}
 }

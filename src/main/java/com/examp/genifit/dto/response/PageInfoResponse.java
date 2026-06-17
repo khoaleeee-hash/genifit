@@ -10,4 +10,6 @@ import lombok.*;
 public class PageInfoResponse {
     private Integer pageNum;
     private Integer pageSize;
+    private Integer totalPage;
+    private Long totalItem;
 }

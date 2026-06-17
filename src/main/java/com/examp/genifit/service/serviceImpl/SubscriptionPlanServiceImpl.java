@@ -276,6 +276,8 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
                         PageInfoResponse.builder()
                                 .pageNum(page.getNumber() + 1)
                                 .pageSize(page.getSize())
+                                .totalPage(page.getTotalPages())
+                                .totalItem(page.getTotalElements())
                                 .build()
                 )
                 .build();
