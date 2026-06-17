@@ -2,11 +2,17 @@ package com.examp.genifit.service.serviceImpl;
 
 import com.examp.genifit.dto.request.CreateSubscriptionPlanRequest;
 import com.examp.genifit.dto.request.UpdateSubscriptionPlanRequest;
+import com.examp.genifit.dto.response.MySubscriptionResponse;
 import com.examp.genifit.dto.response.PageInfoResponse;
 import com.examp.genifit.dto.response.PageResponse;
 import com.examp.genifit.dto.response.SubscriptionPlanResponse;
 import com.examp.genifit.entity.SubscriptionPlan;
+import com.examp.genifit.entity.SubscriptionStatus;
+import com.examp.genifit.entity.User;
+import com.examp.genifit.entity.UserSubscription;
 import com.examp.genifit.repository.SubscriptionPlanRepository;
+import com.examp.genifit.repository.UserRepository;
+import com.examp.genifit.repository.UserSubscriptionRepository;
 import com.examp.genifit.service.SubscriptionPlanService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -22,6 +28,8 @@ import java.math.BigDecimal;
 public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
 
     private final SubscriptionPlanRepository subscriptionPlanRepository;
+    private final UserRepository userRepository;
+    private final UserSubscriptionRepository userSubscriptionRepository;
 
     @Override
     public PageResponse<SubscriptionPlanResponse> getAllPlans(Integer pageNum, Integer pageSize) {
@@ -49,6 +57,18 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy gói đăng ký"));
 
         return new SubscriptionPlanResponse(plan);
+    }
+
+    @Override
+    public MySubscriptionResponse getMySubscription(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng"));
+
+        UserSubscription userSubscription = userSubscriptionRepository
+                .findByUserUserIdAndStatus(user.getUserId(), SubscriptionStatus.ACTIVE)
+                .orElseThrow(() -> new RuntimeException("Người dùng chưa có gói đăng ký đang hoạt động"));
+
+        return new MySubscriptionResponse(userSubscription);
     }
 
     @Override

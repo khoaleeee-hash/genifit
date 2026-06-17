@@ -73,7 +73,7 @@ public class SubscriptionPlanController {
     @Operation(
             summary = "Tìm gói đăng kí theo Id"
     )
-    @GetMapping("/{planId}")
+    @GetMapping("/{planId:\\d+}")
     public ResponseEntity<ApiResponse<SubscriptionPlanResponse>> getPlanById(
             @PathVariable Integer planId
     ) {

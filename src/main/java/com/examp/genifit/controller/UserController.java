@@ -5,9 +5,11 @@ import com.examp.genifit.dto.request.AssignSubscriptionRequest;
 import com.examp.genifit.dto.request.CreateUserRequest;
 import com.examp.genifit.dto.request.GeminiMealSuggestionRequest;
 import com.examp.genifit.dto.response.GeminiMealSuggestionResponse;
+import com.examp.genifit.dto.response.MySubscriptionResponse;
 import com.examp.genifit.dto.response.UserResponse;
 import com.examp.genifit.dto.response.UserSubscriptionResponse;
 import com.examp.genifit.service.GeminiMealSuggestionService;
+import com.examp.genifit.service.SubscriptionPlanService;
 import com.examp.genifit.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -15,6 +17,7 @@ import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -25,8 +28,10 @@ import java.util.List;
 @RequiredArgsConstructor
 @Tag(name = "User")
 public class UserController {
+
     UserService userService;
     GeminiMealSuggestionService geminiMealSuggestionService;
+    SubscriptionPlanService subscriptionPlanService;
 
     @PostMapping("/send-otp")
     public ApiResponse<String> sendOtp(@RequestParam String email) {
@@ -77,6 +82,16 @@ public class UserController {
                 "Get subscription history successfully",
                 userService.getMySubscriptionHistory()
         );
+    }
+
+    @Operation(
+            summary = "Xem gói đăng ký của tôi"
+    )
+    @GetMapping("/my-plan")
+    public MySubscriptionResponse getMySubscription(Authentication authentication) {
+        String username = authentication.getName();
+
+        return subscriptionPlanService.getMySubscription(username);
     }
 
     @Operation(
