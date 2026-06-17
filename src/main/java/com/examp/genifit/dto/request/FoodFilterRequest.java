@@ -1,5 +1,6 @@
 package com.examp.genifit.dto.request;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.*;
 
 @Getter
@@ -20,30 +21,43 @@ public class FoodFilterRequest {
     @Builder
     public static class SearchCondition {
 
-        private Integer foodId;
+        @Schema(example = "")
+        private String foodId;
 
+        @Schema(example = "")
         private String keyword;
 
-        private Double calories;
+        @Schema(example = "")
+        private String calories;
 
-        private Double caloriesFrom;
+        @Schema(example = "")
+        private String caloriesFrom;
 
-        private Double caloriesTo;
+        @Schema(example = "")
+        private String caloriesTo;
 
-        private Double proteinFrom;
+        @Schema(example = "")
+        private String proteinFrom;
 
-        private Double proteinTo;
+        @Schema(example = "")
+        private String proteinTo;
 
-        private Double carbsFrom;
+        @Schema(example = "")
+        private String carbsFrom;
 
-        private Double carbsTo;
+        @Schema(example = "")
+        private String carbsTo;
 
-        private Double fatFrom;
+        @Schema(example = "")
+        private String fatFrom;
 
-        private Double fatTo;
+        @Schema(example = "")
+        private String fatTo;
 
-        private Boolean isPublic;
+        @Schema(example = "")
+        private String isPublic;
 
-        private Boolean isDeleted;
+        @Schema(example = "")
+        private String isDeleted;
     }
 }

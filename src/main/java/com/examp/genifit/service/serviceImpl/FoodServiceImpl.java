@@ -96,29 +96,30 @@ public class FoodServiceImpl implements FoodService {
         Boolean isDeleted = false;
 
         if (condition != null) {
-            foodId = condition.getFoodId();
+            foodId = parseInteger(condition.getFoodId());
 
             if (condition.getKeyword() != null && !condition.getKeyword().trim().isEmpty()) {
                 keyword = condition.getKeyword().trim();
             }
 
-            calories = condition.getCalories();
-            caloriesFrom = condition.getCaloriesFrom();
-            caloriesTo = condition.getCaloriesTo();
+            calories = parseDouble(condition.getCalories());
+            caloriesFrom = parseDouble(condition.getCaloriesFrom());
+            caloriesTo = parseDouble(condition.getCaloriesTo());
 
-            proteinFrom = condition.getProteinFrom();
-            proteinTo = condition.getProteinTo();
+            proteinFrom = parseDouble(condition.getProteinFrom());
+            proteinTo = parseDouble(condition.getProteinTo());
 
-            carbsFrom = condition.getCarbsFrom();
-            carbsTo = condition.getCarbsTo();
+            carbsFrom = parseDouble(condition.getCarbsFrom());
+            carbsTo = parseDouble(condition.getCarbsTo());
 
-            fatFrom = condition.getFatFrom();
-            fatTo = condition.getFatTo();
+            fatFrom = parseDouble(condition.getFatFrom());
+            fatTo = parseDouble(condition.getFatTo());
 
-            isPublic = condition.getIsPublic();
+            isPublic = parseBoolean(condition.getIsPublic());
 
-            if (condition.getIsDeleted() != null) {
-                isDeleted = condition.getIsDeleted();
+            Boolean inputDeleted = parseBoolean(condition.getIsDeleted());
+            if (inputDeleted != null) {
+                isDeleted = inputDeleted;
             }
         }
 
@@ -239,6 +240,48 @@ public class FoodServiceImpl implements FoodService {
         foodItem.setIsPublic(false);
 
         foodItemRepository.save(foodItem);
+    }
+
+    private Integer parseInteger(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            throw new RuntimeException("Giá trị số nguyên không hợp lệ: " + value);
+        }
+    }
+
+    private Double parseDouble(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+
+        try {
+            return Double.parseDouble(value.trim());
+        } catch (NumberFormatException e) {
+            throw new RuntimeException("Giá trị số thực không hợp lệ: " + value);
+        }
+    }
+
+    private Boolean parseBoolean(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+
+        String trimmedValue = value.trim().toLowerCase();
+
+        if ("true".equals(trimmedValue)) {
+            return true;
+        }
+
+        if ("false".equals(trimmedValue)) {
+            return false;
+        }
+
+        throw new RuntimeException("Giá trị boolean không hợp lệ, chỉ được nhập true hoặc false: " + value);
     }
 
     private void validateCreateFood(CreateAdminFoodRequest request) {
