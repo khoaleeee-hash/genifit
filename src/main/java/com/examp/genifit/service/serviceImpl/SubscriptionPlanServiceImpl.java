@@ -2,6 +2,8 @@ package com.examp.genifit.service.serviceImpl;
 
 import com.examp.genifit.dto.request.CreateSubscriptionPlanRequest;
 import com.examp.genifit.dto.request.UpdateSubscriptionPlanRequest;
+import com.examp.genifit.dto.response.PageInfoResponse;
+import com.examp.genifit.dto.response.PageResponse;
 import com.examp.genifit.dto.response.SubscriptionPlanResponse;
 import com.examp.genifit.entity.SubscriptionPlan;
 import com.examp.genifit.repository.SubscriptionPlanRepository;
@@ -22,16 +24,28 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
     private final SubscriptionPlanRepository subscriptionPlanRepository;
 
     @Override
-    public Page<SubscriptionPlanResponse> getActivePlans(Integer pageNum, Integer pageSize) {
+    public PageResponse<SubscriptionPlanResponse> getAllPlans(Integer pageNum, Integer pageSize) {
         Pageable pageable = buildPageable(pageNum, pageSize);
 
-        return subscriptionPlanRepository.findByActiveTrue(pageable)
+        Page<SubscriptionPlanResponse> page = subscriptionPlanRepository.findByDeletedFalse(pageable)
                 .map(SubscriptionPlanResponse::new);
+
+        return buildPageResponse(page);
+    }
+
+    @Override
+    public PageResponse<SubscriptionPlanResponse> getActivePlans(Integer pageNum, Integer pageSize) {
+        Pageable pageable = buildPageable(pageNum, pageSize);
+
+        Page<SubscriptionPlanResponse> page = subscriptionPlanRepository.findByActiveTrueAndDeletedFalse(pageable)
+                .map(SubscriptionPlanResponse::new);
+
+        return buildPageResponse(page);
     }
 
     @Override
     public SubscriptionPlanResponse getPlanById(Integer planId) {
-        SubscriptionPlan plan = subscriptionPlanRepository.findById(planId)
+        SubscriptionPlan plan = subscriptionPlanRepository.findByPlanIdAndDeletedFalse(planId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy gói đăng ký"));
 
         return new SubscriptionPlanResponse(plan);
@@ -41,7 +55,7 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
     public SubscriptionPlanResponse createPlan(CreateSubscriptionPlanRequest request) {
         validateCreateRequest(request);
 
-        if (subscriptionPlanRepository.existsByPlanType(request.getPlanType())) {
+        if (subscriptionPlanRepository.existsByPlanTypeAndDeletedFalse(request.getPlanType())) {
             throw new RuntimeException("Plan type này đã tồn tại");
         }
 
@@ -72,8 +86,8 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
                 .calorieDeficitTrackingEnabled(request.getCalorieDeficitTrackingEnabled() == null ? false : request.getCalorieDeficitTrackingEnabled())
                 .calorieSurplusTrackingEnabled(request.getCalorieSurplusTrackingEnabled() == null ? false : request.getCalorieSurplusTrackingEnabled())
                 .bloodSugarControlEnabled(request.getBloodSugarControlEnabled() == null ? false : request.getBloodSugarControlEnabled())
-
                 .active(request.getActive() == null ? true : request.getActive())
+                .deleted(false)
                 .build();
 
         SubscriptionPlan savedPlan = subscriptionPlanRepository.save(plan);
@@ -83,11 +97,11 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
 
     @Override
     public SubscriptionPlanResponse updatePlan(Integer planId, UpdateSubscriptionPlanRequest request) {
-        SubscriptionPlan plan = subscriptionPlanRepository.findById(planId)
+        SubscriptionPlan plan = subscriptionPlanRepository.findByPlanIdAndDeletedFalse(planId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy gói đăng ký"));
 
         if (request.getPlanType() != null && !request.getPlanType().equals(plan.getPlanType())) {
-            if (subscriptionPlanRepository.existsByPlanType(request.getPlanType())) {
+            if (subscriptionPlanRepository.existsByPlanTypeAndDeletedFalse(request.getPlanType())) {
                 throw new RuntimeException("Plan type này đã tồn tại");
             }
             plan.setPlanType(request.getPlanType());
@@ -184,9 +198,10 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
 
     @Override
     public void deletePlan(Integer planId) {
-        SubscriptionPlan plan = subscriptionPlanRepository.findById(planId)
+        SubscriptionPlan plan = subscriptionPlanRepository.findByPlanIdAndDeletedFalse(planId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy gói đăng ký"));
 
+        plan.setDeleted(true);
         plan.setActive(false);
 
         subscriptionPlanRepository.save(plan);
@@ -194,7 +209,7 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
 
     private Pageable buildPageable(Integer pageNum, Integer pageSize) {
         if (pageNum == null || pageNum < 0) {
-            pageNum = 0;
+            pageNum = 1;
         }
 
         if (pageSize == null || pageSize <= 0) {
@@ -206,9 +221,9 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
         }
 
         return PageRequest.of(
-                pageNum,
+                pageNum - 1,
                 pageSize,
-                Sort.by(Sort.Direction.ASC, "price")
+                Sort.by(Sort.Direction.ASC, "planId")
         );
     }
 
@@ -232,5 +247,17 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
         if (request.getDurationDays() != null && request.getDurationDays() <= 0) {
             throw new RuntimeException("durationDays phải lớn hơn 0");
         }
+    }
+
+    private PageResponse<SubscriptionPlanResponse> buildPageResponse(Page<SubscriptionPlanResponse> page) {
+        return PageResponse.<SubscriptionPlanResponse>builder()
+                .content(page.getContent())
+                .pageInfo(
+                        PageInfoResponse.builder()
+                                .pageNum(page.getNumber() + 1)
+                                .pageSize(page.getSize())
+                                .build()
+                )
+                .build();
     }
 }

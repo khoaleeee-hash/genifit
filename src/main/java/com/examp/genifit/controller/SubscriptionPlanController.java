@@ -2,7 +2,9 @@ package com.examp.genifit.controller;
 
 import com.examp.genifit.common.response.ApiResponse;
 import com.examp.genifit.dto.request.CreateSubscriptionPlanRequest;
+import com.examp.genifit.dto.request.SubscriptionPlanPagingRequest;
 import com.examp.genifit.dto.request.UpdateSubscriptionPlanRequest;
+import com.examp.genifit.dto.response.PageResponse;
 import com.examp.genifit.dto.response.SubscriptionPlanResponse;
 import com.examp.genifit.service.SubscriptionPlanService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -23,19 +25,49 @@ public class SubscriptionPlanController {
     private final SubscriptionPlanService subscriptionPlanService;
 
     @Operation(
-            summary = "Lấy danh sách những gói đăng kí"
+            summary = "Lấy tất cả những gói đăng kí"
     )
-    @GetMapping
-    public ResponseEntity<ApiResponse<List<SubscriptionPlanResponse>>> getActivePlans(
-            @RequestParam(defaultValue = "0") Integer pageNum,
-            @RequestParam(defaultValue = "10") Integer pageSize
+    @PostMapping("/get-all")
+    public PageResponse<SubscriptionPlanResponse> getAllPlans(
+            @RequestBody(required = false) SubscriptionPlanPagingRequest request
     ) {
-        Page<SubscriptionPlanResponse> page =
-                subscriptionPlanService.getActivePlans(pageNum, pageSize);
+        int pageNum = 1;
+        int pageSize = 10;
 
-        return ResponseEntity.ok(
-                ApiResponse.successPage("Get active subscription plans successfully", page)
-        );
+        if (request != null && request.getPageInfo() != null) {
+            if (request.getPageInfo().getPageNum() != null) {
+                pageNum = request.getPageInfo().getPageNum();
+            }
+
+            if (request.getPageInfo().getPageSize() != null) {
+                pageSize = request.getPageInfo().getPageSize();
+            }
+        }
+
+        return subscriptionPlanService.getAllPlans(pageNum, pageSize);
+    }
+
+    @Operation(
+            summary = "Lấy danh sách những gói đăng kí được active"
+    )
+    @PostMapping("/active")
+    public PageResponse<SubscriptionPlanResponse> getActivePlans(
+            @RequestBody(required = false) SubscriptionPlanPagingRequest request
+    ) {
+        int pageNum = 1;
+        int pageSize = 10;
+
+        if (request != null && request.getPageInfo() != null) {
+            if (request.getPageInfo().getPageNum() != null) {
+                pageNum = request.getPageInfo().getPageNum();
+            }
+
+            if (request.getPageInfo().getPageSize() != null) {
+                pageSize = request.getPageInfo().getPageSize();
+            }
+        }
+
+        return subscriptionPlanService.getActivePlans(pageNum, pageSize);
     }
 
     @Operation(

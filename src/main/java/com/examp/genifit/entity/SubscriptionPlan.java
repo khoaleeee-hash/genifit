@@ -84,7 +84,10 @@ public class SubscriptionPlan {
     private Boolean bloodSugarControlEnabled;
 
     @Column(nullable = false)
-    private Boolean active;
+    private Boolean active = true;
+
+    @Column(columnDefinition = "TINYINT(1) DEFAULT 0")
+    private Boolean deleted = false;
 
     private LocalDateTime createdAt;
 
@@ -97,6 +100,10 @@ public class SubscriptionPlan {
 
         if (price == null) {
             price = BigDecimal.ZERO;
+        }
+
+        if(deleted == null){
+            deleted = false;
         }
 
         if (durationDays == null) {
