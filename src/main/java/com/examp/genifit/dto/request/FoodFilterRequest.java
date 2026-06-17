@@ -1,6 +1,5 @@
 package com.examp.genifit.dto.request;
 
-import com.examp.genifit.dto.response.PageInfoResponse;
 import lombok.*;
 
 @Getter
@@ -12,7 +11,7 @@ public class FoodFilterRequest {
 
     private SearchCondition searchCondition;
 
-    private PageInfoResponse pageInfo;
+    private PageInfoRequest pageInfo;
 
     @Getter
     @Setter
