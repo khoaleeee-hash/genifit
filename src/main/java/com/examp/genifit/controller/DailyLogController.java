@@ -13,6 +13,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
@@ -30,9 +31,11 @@ public class DailyLogController {
 
     @PostMapping("/meals/manual-foods")
     public AddManualFoodResponse addManualFood(
-            @RequestBody AddManualFoodRequest request
+            @RequestBody AddManualFoodRequest request,
+            Authentication authentication
     ) {
-        return dailyLogService.addManualFood(request);
+        String username = authentication.getName();
+        return dailyLogService.addManualFood(username, request);
     }
 
     @GetMapping("/today")

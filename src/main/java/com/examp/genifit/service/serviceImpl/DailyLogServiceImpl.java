@@ -32,11 +32,15 @@ public class DailyLogServiceImpl implements DailyLogService {
     private final LogDetailRepository logDetailRepository;
 
     @Override
-    public AddManualFoodResponse addManualFood(AddManualFoodRequest request) {
+    @Transactional
+    public AddManualFoodResponse addManualFood(String username, AddManualFoodRequest request) {
 
-        if (request.getUserId() == null && request.getGuestId() == null) {
-            throw new RuntimeException("Cần truyền userId hoặc guestId");
-        }
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy user đang đăng nhập"));
+
+//        if (request.getUserId() != null && request.getGuestId() != null) {
+//            throw new RuntimeException("Chỉ được truyền userId hoặc guestId");
+//        }
 
         if (request.getQuantity() == null || request.getQuantity() <= 0) {
             throw new RuntimeException("Số lượng món ăn phải lớn hơn 0");
@@ -44,24 +48,14 @@ public class DailyLogServiceImpl implements DailyLogService {
 
         FoodItem foodItem = findFoodItem(request);
 
-        LocalDate today = LocalDate.now();
-        DailyLog dailyLog;
-
-        if (request.getUserId() != null) {
-            User user = userRepository.findById(request.getUserId())
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy user"));
-
-            dailyLog = dailyLogRepository
-                    .findByUser_UserIdAndLogDate(request.getUserId(), today)
-                    .orElseGet(() -> createDailyLogForUser(user));
-        } else {
-            Guest guest = guestRepository.findById(request.getGuestId())
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy guest"));
-
-            dailyLog = dailyLogRepository
-                    .findByGuest_GuestIdAndLogDate(request.getGuestId(), today)
-                    .orElseGet(() -> createDailyLogForGuest(guest));
+        if (foodItem.getCalories() == null) {
+            throw new RuntimeException("Món ăn chưa có thông tin calories");
         }
+
+        LocalDate today = LocalDate.now();
+        DailyLog dailyLog = dailyLogRepository
+                .findByUser_UserIdAndLogDate(user.getUserId(), today)
+                .orElseGet(() -> createDailyLogForUser(user));
 
         MealTime mealTime = request.getMealTime() == null
                 ? MealTime.SNACK
@@ -238,18 +232,15 @@ public class DailyLogServiceImpl implements DailyLogService {
 
     private FoodItem findFoodItem(AddManualFoodRequest request) {
 
-        if (request.getFoodId() != null) {
-            return foodItemRepository.findById(request.getFoodId())
-                    .filter(food -> !Boolean.TRUE.equals(food.getDeleted()))
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn"));
+        String foodName = request.getFoodName();
+
+        if (foodName == null || foodName.trim().isEmpty()) {
+            throw new RuntimeException("Cần truyền tên món ăn");
         }
 
-        if (request.getFoodName() != null && !request.getFoodName().trim().isEmpty()) {
-            return foodItemRepository.findByFoodNameIgnoreCaseAndDeletedFalse(request.getFoodName().trim())
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn có tên: " + request.getFoodName()));
-        }
-
-        throw new RuntimeException("Cần truyền foodId hoặc foodName");
+        return foodItemRepository
+                .findByFoodNameIgnoreCaseAndDeletedFalse(foodName.trim())
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn có tên: " + foodName));
     }
 
     private DailyLog createDailyLogForUser(User user) {
