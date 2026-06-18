@@ -124,14 +124,24 @@ public class DailyLogServiceImpl implements DailyLogService {
     @Transactional(readOnly = true)
     public DailyCaloriesResponse getTodayCalories(Integer userId) {
 
-        DailyLog dailyLog = dailyLogRepository.findByUser_UserIdAndLogDate(userId, LocalDate.now())
+        LocalDate today = LocalDate.now();
+
+        DailyLog dailyLog = dailyLogRepository.findByUser_UserIdAndLogDate(userId, today)
                 .orElseThrow(() -> new ApiException(ErrorCode.DAILY_LOG_NOT_FOUND));
+
+        Double totalCalories = safeDouble(dailyLog.getTotalCalories());
+        Double targetCalories = resolveTargetCalories(dailyLog.getTargetCalories());
+
+        Double progressPercent = calculateProgressPercent(totalCalories, targetCalories);
+
+        StatusColor statusColor = calculateStatusColor(totalCalories, targetCalories);
 
         return DailyCaloriesResponse.builder()
                 .date(dailyLog.getLogDate())
-                .totalCalories(dailyLog.getTotalCalories())
-                .targetCalories(dailyLog.getTargetCalories())
-                .statusColor(dailyLog.getStatusColor())
+                .totalCalories(totalCalories)
+                .targetCalories(targetCalories)
+                .progressPercent(progressPercent)
+                .statusColor(statusColor)
                 .build();
     }
 
@@ -161,30 +171,6 @@ public class DailyLogServiceImpl implements DailyLogService {
                 .targetCalories(dailyLog.getTargetCalories())
                 .statusColor(dailyLog.getStatusColor())
                 .foods(foods)
-                .build();
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public HomeStatusResponse getHomeStatus(Integer userId) {
-
-        LocalDate today = LocalDate.now();
-
-        DailyLog dailyLog = dailyLogRepository.findByUser_UserIdAndLogDate(userId, today)
-                .orElseThrow(() -> new ApiException(ErrorCode.DAILY_LOG_NOT_FOUND));
-
-        Double totalCalories = safeDouble(dailyLog.getTotalCalories());
-        Double targetCalories = resolveTargetCalories(dailyLog.getTargetCalories());
-
-        double progressPercent = calculateProgressPercent(totalCalories, targetCalories);
-
-        StatusColor statusColor = calculateStatusColor(totalCalories, targetCalories);
-
-        return HomeStatusResponse.builder()
-                .totalCalories(totalCalories)
-                .targetCalories(targetCalories)
-                .progressPercent(progressPercent)
-                .statusColor(statusColor)
                 .build();
     }
 

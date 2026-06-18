@@ -55,17 +55,6 @@ public class DailyLogController {
                 dailyLogService.getCaloriesByDate(userId, date)));
     }
 
-    @GetMapping("/home-status")
-    @Operation(summary = "Get home page calorie status")
-    public ResponseEntity<ApiResponse<HomeStatusResponse>>
-    getHomeStatus(@AuthenticationPrincipal Jwt jwt) {
-        Integer userId = jwtUtils.getUserId(jwt);
-
-        HomeStatusResponse response = dailyLogService.getHomeStatus(userId);
-
-        return ResponseEntity.ok(ApiResponse.success("Home status fetched successfully", response));
-    }
-
     @GetMapping("/monthly")
     @Operation(summary = "Get monthly calorie logs")
     public ResponseEntity<ApiResponse<List<DailySummaryResponse>>> getMonthlyLogs

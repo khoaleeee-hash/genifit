@@ -15,8 +15,6 @@ public interface DailyLogService {
 
     List<DailySummaryResponse> getMonthlyLogs(Integer userId, Integer year, Integer month);
 
-    HomeStatusResponse getHomeStatus(Integer userId);
-
     WeeklyChartResponse getWeeklyChart(Integer userId);
 
 }

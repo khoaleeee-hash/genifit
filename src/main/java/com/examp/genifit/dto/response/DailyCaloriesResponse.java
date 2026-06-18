@@ -16,5 +16,7 @@ public class DailyCaloriesResponse {
 
     private Double targetCalories;
 
+    private Double progressPercent;
+
     private StatusColor statusColor;
 }
