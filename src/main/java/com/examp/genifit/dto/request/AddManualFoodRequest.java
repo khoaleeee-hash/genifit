@@ -1,8 +1,6 @@
 package com.examp.genifit.dto.request;
 
 import com.examp.genifit.entity.MealTime;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.*;
 
@@ -11,10 +9,20 @@ import lombok.*;
 
 public class AddManualFoodRequest {
 
-    @NotBlank(message = "foodName is required")
+    private Integer foodId;
+
+    private Integer scanId;
+
     private String foodName;
 
-    @NotNull(message = "quantity is required")
+    private Double calories;
+
+    private Double fat;
+
+    private Double carbs;
+
+    private Double protein;
+
     @Positive(message = "quantity must be greater than 0")
     private Double quantity;
 

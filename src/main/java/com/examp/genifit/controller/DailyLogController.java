@@ -7,6 +7,7 @@ import com.examp.genifit.dto.response.*;
 import com.examp.genifit.service.DailyLogService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -31,10 +32,15 @@ public class DailyLogController {
 
     @PostMapping("/meals/manual-foods")
     public AddManualFoodResponse addManualFood(
-            @RequestBody AddManualFoodRequest request,
+            @Valid @RequestBody AddManualFoodRequest request,
             Authentication authentication
     ) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new RuntimeException("Bạn cần đăng nhập để thêm món ăn");
+        }
+
         String username = authentication.getName();
+
         return dailyLogService.addManualFood(username, request);
     }
 

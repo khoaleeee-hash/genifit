@@ -2,6 +2,7 @@ package com.examp.genifit.service.serviceImpl;
 
 import com.examp.genifit.common.exception.ApiException;
 import com.examp.genifit.common.exception.ErrorCode;
+import com.examp.genifit.dto.info.ResolvedFoodInfo;
 import com.examp.genifit.dto.response.*;
 import com.examp.genifit.dto.request.AddManualFoodRequest;
 import com.examp.genifit.entity.*;
@@ -30,6 +31,7 @@ public class DailyLogServiceImpl implements DailyLogService {
     private final GuestRepository guestRepository;
     private final UserRepository userRepository;
     private final LogDetailRepository logDetailRepository;
+    private final AIScanHistoryRepository aiScanHistoryRepository;
 
     @Override
     @Transactional
@@ -38,21 +40,14 @@ public class DailyLogServiceImpl implements DailyLogService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy user đang đăng nhập"));
 
-//        if (request.getUserId() != null && request.getGuestId() != null) {
-//            throw new RuntimeException("Chỉ được truyền userId hoặc guestId");
-//        }
-
         if (request.getQuantity() == null || request.getQuantity() <= 0) {
             throw new RuntimeException("Số lượng món ăn phải lớn hơn 0");
         }
 
-        FoodItem foodItem = findFoodItem(request);
-
-        if (foodItem.getCalories() == null) {
-            throw new RuntimeException("Món ăn chưa có thông tin calories");
-        }
+        ResolvedFoodInfo foodInfo = resolveFoodInfo(user, request);
 
         LocalDate today = LocalDate.now();
+
         DailyLog dailyLog = dailyLogRepository
                 .findByUser_UserIdAndLogDate(user.getUserId(), today)
                 .orElseGet(() -> createDailyLogForUser(user));
@@ -61,30 +56,63 @@ public class DailyLogServiceImpl implements DailyLogService {
                 ? MealTime.SNACK
                 : request.getMealTime();
 
-        boolean isDuplicate = logDetailRepository
-                .existsByDailyLog_LogIdAndFoodItem_FoodIdAndMealTime(
-                        dailyLog.getLogId(),
-                        foodItem.getFoodId(),
-                        mealTime
-                );
+        FoodItem foodItem = null;
 
-        double addedCalories = foodItem.getCalories() * request.getQuantity();
+        if (foodInfo.getFoodId() != null) {
+            foodItem = foodItemRepository.findById(foodInfo.getFoodId())
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn với foodId: " + foodInfo.getFoodId()));
+        }
+
+        boolean isDuplicate = false;
+
+        if (foodInfo.getFoodId() != null) {
+            isDuplicate = logDetailRepository
+                    .existsByDailyLog_LogIdAndFoodItem_FoodIdAndMealTime(
+                            dailyLog.getLogId(),
+                            foodInfo.getFoodId(),
+                            mealTime
+                    );
+        }
+        else {
+            isDuplicate = logDetailRepository
+                    .existsByDailyLog_LogIdAndFoodNameSnapshotIgnoreCaseAndMealTime(
+                            dailyLog.getLogId(),
+                            foodInfo.getFoodName(),
+                            mealTime
+                    );
+        }
+
+        double quantity = request.getQuantity();
+
+        double addedCalories = safeDouble(foodInfo.getCalories()) * quantity;
+        double addedFat = safeDouble(foodInfo.getFat()) * quantity;
+        double addedCarbs = safeDouble(foodInfo.getCarbs()) * quantity;
+        double addedProtein = safeDouble(foodInfo.getProtein()) * quantity;
 
         LogDetail logDetail = new LogDetail();
         logDetail.setDailyLog(dailyLog);
+
         logDetail.setFoodItem(foodItem);
-        logDetail.setQuantity(request.getQuantity());
+
+        logDetail.setFoodNameSnapshot(foodInfo.getFoodName());
+        logDetail.setQuantity(quantity);
         logDetail.setCalories(addedCalories);
+        logDetail.setFat(addedFat);
+        logDetail.setCarbs(addedCarbs);
+        logDetail.setProtein(addedProtein);
         logDetail.setSource(FoodSource.MANUAL);
         logDetail.setMealTime(mealTime);
         logDetail.setCreatedAt(LocalDateTime.now());
 
+        if(foodInfo.getScanId() != null) {
+            AIScanHistory scanHistory = aiScanHistoryRepository.findById(foodInfo.getScanId())
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy lịch sử scan với scanId: " + foodInfo.getScanId()));
+
+            logDetail.setScanHistory(scanHistory);
+        }
         logDetailRepository.save(logDetail);
 
-        double currentTotal = dailyLog.getTotalCalories() == null
-                ? 0
-                : dailyLog.getTotalCalories();
-
+        double currentTotal = safeDouble(dailyLog.getTotalCalories());
         double newTotal = currentTotal + addedCalories;
 
         dailyLog.setTotalCalories(newTotal);
@@ -104,8 +132,8 @@ public class DailyLogServiceImpl implements DailyLogService {
 
         return new AddManualFoodResponse(
                 message,
-                foodItem.getFoodName(),
-                request.getQuantity(),
+                foodInfo.getFoodName(),
+                quantity,
                 addedCalories,
                 newTotal,
                 dailyLog.getStatusColor().name(),
@@ -384,4 +412,132 @@ public class DailyLogServiceImpl implements DailyLogService {
             throw new ApiException(ErrorCode.VALIDATION_ERROR, "Month must be between 1 and 12");
         }
     }
+
+    private ResolvedFoodInfo resolveFoodInfo(User user, AddManualFoodRequest request) {
+
+        boolean hasFoodId = request.getFoodId() != null;
+        boolean hasScanId = request.getScanId() != null;
+        boolean hasFoodName = request.getFoodName() != null
+                && !request.getFoodName().trim().isEmpty();
+
+        int sourceCount = 0;
+
+        if (hasFoodId) {
+            sourceCount++;
+        }
+
+        if (hasScanId) {
+            sourceCount++;
+        }
+
+        if (hasFoodName) {
+            sourceCount++;
+        }
+
+        if (sourceCount == 0) {
+            throw new RuntimeException("Vui lòng truyền foodId, scanId hoặc foodName");
+        }
+
+        if (sourceCount > 1) {
+            throw new RuntimeException("Chỉ được truyền một trong ba: foodId, scanId hoặc foodName");
+        }
+
+        if (hasFoodId) {
+            return resolveFromFoodItem(request.getFoodId());
+        }
+
+        if (hasScanId) {
+            return resolveFromScanHistory(user, request.getScanId());
+        }
+
+        return resolveFromManualInput(request);
+    }
+
+    private ResolvedFoodInfo resolveFromFoodItem(Integer foodId) {
+
+        FoodItem foodItem = foodItemRepository.findByFoodIdAndDeletedFalse(foodId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn với foodId: " + foodId));
+
+        if (foodItem.getCalories() == null) {
+            throw new RuntimeException("Món ăn chưa có thông tin calories");
+        }
+
+        return ResolvedFoodInfo.builder()
+                .foodId(foodItem.getFoodId())
+                .scanId(null)
+                .foodName(foodItem.getFoodName())
+                .calories(foodItem.getCalories())
+                .fat(foodItem.getFat())
+                .carbs(foodItem.getCarbs())
+                .protein(foodItem.getProtein())
+                .build();
+    }
+
+    private ResolvedFoodInfo resolveFromScanHistory(User user, Integer scanId) {
+
+        AIScanHistory scanHistory = aiScanHistoryRepository.findById(scanId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy lịch sử scan với scanId: " + scanId));
+
+        if (scanHistory.getUser() == null
+                || !scanHistory.getUser().getUserId().equals(user.getUserId())) {
+            throw new RuntimeException("Bạn không có quyền sử dụng scanId này");
+        }
+
+        if (scanHistory.getDetectedFood() == null
+                || scanHistory.getDetectedFood().trim().isEmpty()) {
+            throw new RuntimeException("Lịch sử scan chưa có tên món ăn");
+        }
+
+        if (scanHistory.getEstimatedCalories() == null) {
+            throw new RuntimeException("Lịch sử scan chưa có thông tin calories");
+        }
+
+        return ResolvedFoodInfo.builder()
+                .foodId(null)
+                .scanId(scanHistory.getScanId())
+                .foodName(scanHistory.getDetectedFood())
+                .calories(scanHistory.getEstimatedCalories())
+                .fat(scanHistory.getFat())
+                .carbs(scanHistory.getCarbs())
+                .protein(scanHistory.getProtein())
+                .build();
+    }
+
+    private void validateManualNutrition(AddManualFoodRequest request) {
+
+        if (request.getFoodName() == null || request.getFoodName().trim().isEmpty()) {
+            throw new RuntimeException("foodName is required");
+        }
+
+        if (request.getCalories() == null || request.getCalories() < 0) {
+            throw new RuntimeException("calories is required and must be >= 0");
+        }
+
+        if (request.getFat() == null || request.getFat() < 0) {
+            throw new RuntimeException("fat is required and must be >= 0");
+        }
+
+        if (request.getCarbs() == null || request.getCarbs() < 0) {
+            throw new RuntimeException("carbs is required and must be >= 0");
+        }
+
+        if (request.getProtein() == null || request.getProtein() < 0) {
+            throw new RuntimeException("protein is required and must be >= 0");
+        }
+    }
+    private ResolvedFoodInfo resolveFromManualInput(AddManualFoodRequest request) {
+
+        validateManualNutrition(request);
+
+        return ResolvedFoodInfo.builder()
+                .foodId(null)
+                .scanId(null)
+                .foodName(request.getFoodName().trim())
+                .calories(request.getCalories())
+                .fat(request.getFat())
+                .carbs(request.getCarbs())
+                .protein(request.getProtein())
+                .build();
+    }
+
 }
