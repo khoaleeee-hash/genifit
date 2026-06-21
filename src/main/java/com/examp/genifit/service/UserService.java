@@ -1,17 +1,23 @@
 package com.examp.genifit.service;
 
+import com.examp.genifit.dto.request.ChangePasswordRequest;
 import com.examp.genifit.dto.request.CreateUserRequest;
+import com.examp.genifit.dto.request.ResetPasswordRequest;
 import com.examp.genifit.dto.response.UserResponse;
 
 import java.util.List;
 
 public interface UserService {
     UserResponse createUser(CreateUserRequest request);
-    void deleteUserById(Integer id);
     UserResponse getUser(Integer id);
     void generateAndSendOtp(String email);
 //    UserResponse updateUser(Integer userId, UserUpdateRequest request)
-
+    UserResponse getMyInfo();
+    List<UserResponse> searchUsers(String keyword);
     List<UserResponse> getUsers();
-
+    void changePassword(ChangePasswordRequest request);
+    void resetPassword(ResetPasswordRequest request);
+    void deleteMe();
+    void deleteUserById(Integer id);
+    void generateAndSendOtpForForgotPassword(String email);
 }
