@@ -152,19 +152,30 @@ public class DailyLogServiceImpl implements DailyLogService {
 
         LocalDate today = LocalDate.now();
 
-        DailyLog dailyLog = dailyLogRepository.findByUser_UserIdAndLogDate(userId, today)
+        DailyLog dailyLog = dailyLogRepository
+                .findByUser_UserIdAndLogDate(userId, today)
                 .orElseThrow(() -> new ApiException(ErrorCode.DAILY_LOG_NOT_FOUND));
 
-        Double totalCalories = safeDouble(dailyLog.getTotalCalories());
+        NutritionTotals totals = calculateNutritionTotals(dailyLog);
+
         Double targetCalories = resolveTargetCalories(dailyLog.getTargetCalories());
 
-        Double progressPercent = calculateProgressPercent(totalCalories, targetCalories);
+        Double progressPercent = calculateProgressPercent(
+                totals.calories,
+                targetCalories
+        );
 
-        StatusColor statusColor = calculateStatusColor(totalCalories, targetCalories);
+        StatusColor statusColor = calculateStatusColor(
+                totals.calories,
+                targetCalories
+        );
 
         return DailyCaloriesResponse.builder()
                 .date(dailyLog.getLogDate())
-                .totalCalories(totalCalories)
+                .totalCalories(totals.calories)
+                .totalProtein(totals.protein)
+                .totalCarbs(totals.carbs)
+                .totalFat(totals.fat)
                 .targetCalories(targetCalories)
                 .progressPercent(progressPercent)
                 .statusColor(statusColor)
@@ -173,19 +184,40 @@ public class DailyLogServiceImpl implements DailyLogService {
 
     @Override
     @Transactional(readOnly = true)
-    public DailyLogResponse getCaloriesByDate(Integer userId, LocalDate date) {
+    public DailyLogResponse getCaloriesByDate(
+            Integer userId,
+            LocalDate date
+    ) {
 
-        DailyLog dailyLog = dailyLogRepository.findByUser_UserIdAndLogDate(userId, date)
+        DailyLog dailyLog = dailyLogRepository
+                .findByUser_UserIdAndLogDate(userId, date)
                 .orElseThrow(() -> new ApiException(ErrorCode.DAILY_LOG_NOT_FOUND));
+
+        NutritionTotals totals = calculateNutritionTotals(dailyLog);
+
+        Double targetCalories = resolveTargetCalories(dailyLog.getTargetCalories());
+
+        Double progressPercent = calculateProgressPercent(
+                totals.calories,
+                targetCalories
+        );
+
+        StatusColor statusColor = calculateStatusColor(
+                totals.calories,
+                targetCalories
+        );
 
         List<DailyLogResponse.FoodDetail> foods = dailyLog.getLogDetails()
                 .stream()
                 .map(detail ->
                         DailyLogResponse.FoodDetail
                                 .builder()
-                                .foodName(detail.getFoodItem().getFoodName())
-                                .quantity(detail.getQuantity())
-                                .calories(detail.getCalories())
+                                .foodName(resolveFoodName(detail))
+                                .quantity(safeDouble(detail.getQuantity()))
+                                .calories(roundOneDecimal(detail.getCalories()))
+                                .protein(roundOneDecimal(detail.getProtein()))
+                                .carbs(roundOneDecimal(detail.getCarbs()))
+                                .fat(roundOneDecimal(detail.getFat()))
                                 .mealTime(detail.getMealTime())
                                 .build()
                 )
@@ -193,9 +225,13 @@ public class DailyLogServiceImpl implements DailyLogService {
 
         return DailyLogResponse.builder()
                 .date(dailyLog.getLogDate())
-                .totalCalories(dailyLog.getTotalCalories())
-                .targetCalories(dailyLog.getTargetCalories())
-                .statusColor(dailyLog.getStatusColor())
+                .totalCalories(totals.calories)
+                .totalProtein(totals.protein)
+                .totalCarbs(totals.carbs)
+                .totalFat(totals.fat)
+                .targetCalories(targetCalories)
+                .progressPercent(progressPercent)
+                .statusColor(statusColor)
                 .foods(foods)
                 .build();
     }
@@ -322,23 +358,27 @@ public class DailyLogServiceImpl implements DailyLogService {
         }
     }
 
-    //Helper cho monthly và weekly chart
     private DailySummaryResponse mapToDailySummaryResponse(DailyLog log) {
 
-        Double totalCalories = safeDouble(log.getTotalCalories());
+        NutritionTotals totals = calculateNutritionTotals(log);
+
         Double targetCalories = resolveTargetCalories(log.getTargetCalories());
+
         Double progressPercent = calculateProgressPercent(
-                totalCalories,
+                totals.calories,
                 targetCalories
         );
 
         StatusColor statusColor = log.getStatusColor() != null
                 ? log.getStatusColor()
-                : calculateStatusColor(totalCalories, targetCalories);
+                : calculateStatusColor(totals.calories, targetCalories);
 
         return DailySummaryResponse.builder()
                 .date(log.getLogDate())
-                .totalCalories(totalCalories)
+                .totalCalories(totals.calories)
+                .totalProtein(totals.protein)
+                .totalCarbs(totals.carbs)
+                .totalFat(totals.fat)
                 .targetCalories(targetCalories)
                 .progressPercent(progressPercent)
                 .statusColor(statusColor)
@@ -347,21 +387,26 @@ public class DailyLogServiceImpl implements DailyLogService {
 
     private WeeklyChartPointResponse mapToWeeklyChartPoint(DailyLog log) {
 
-        Double totalCalories = safeDouble(log.getTotalCalories());
+        NutritionTotals totals = calculateNutritionTotals(log);
+
         Double targetCalories = resolveTargetCalories(log.getTargetCalories());
+
         Double progressPercent = calculateProgressPercent(
-                totalCalories,
+                totals.calories,
                 targetCalories
         );
 
         StatusColor statusColor = log.getStatusColor() != null
                 ? log.getStatusColor()
-                : calculateStatusColor(totalCalories, targetCalories);
+                : calculateStatusColor(totals.calories, targetCalories);
 
         return WeeklyChartPointResponse.builder()
                 .date(log.getLogDate())
                 .label(formatChartLabel(log.getLogDate()))
-                .totalCalories(totalCalories)
+                .totalCalories(totals.calories)
+                .totalProtein(totals.protein)
+                .totalCarbs(totals.carbs)
+                .totalFat(totals.fat)
                 .targetCalories(targetCalories)
                 .progressPercent(progressPercent)
                 .statusColor(statusColor)
@@ -377,6 +422,9 @@ public class DailyLogServiceImpl implements DailyLogService {
                 .date(date)
                 .label(formatChartLabel(date))
                 .totalCalories(totalCalories)
+                .totalProtein(0.0)
+                .totalCarbs(0.0)
+                .totalFat(0.0)
                 .targetCalories(targetCalories)
                 .progressPercent(0.0)
                 .statusColor(StatusColor.BLUE)
@@ -556,6 +604,87 @@ public class DailyLogServiceImpl implements DailyLogService {
         if (request.getProtein() == null || request.getProtein() < 0) {
             throw new IllegalArgumentException("protein is required and must be >= 0");
         }
+    }
+
+    private static class NutritionTotals {
+
+        private final Double calories;
+        private final Double protein;
+        private final Double carbs;
+        private final Double fat;
+
+        public NutritionTotals(
+                Double calories,
+                Double protein,
+                Double carbs,
+                Double fat
+        ) {
+            this.calories = calories;
+            this.protein = protein;
+            this.carbs = carbs;
+            this.fat = fat;
+        }
+    }
+
+    private NutritionTotals calculateNutritionTotals(DailyLog dailyLog) {
+
+        if (dailyLog.getLogDetails() == null || dailyLog.getLogDetails().isEmpty()) {
+            return new NutritionTotals(
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+            );
+        }
+
+        double totalCalories = dailyLog.getLogDetails()
+                .stream()
+                .mapToDouble(detail -> safeDouble(detail.getCalories()))
+                .sum();
+
+        double totalProtein = dailyLog.getLogDetails()
+                .stream()
+                .mapToDouble(detail -> safeDouble(detail.getProtein()))
+                .sum();
+
+        double totalCarbs = dailyLog.getLogDetails()
+                .stream()
+                .mapToDouble(detail -> safeDouble(detail.getCarbs()))
+                .sum();
+
+        double totalFat = dailyLog.getLogDetails()
+                .stream()
+                .mapToDouble(detail -> safeDouble(detail.getFat()))
+                .sum();
+
+        return new NutritionTotals(
+                roundOneDecimal(totalCalories),
+                roundOneDecimal(totalProtein),
+                roundOneDecimal(totalCarbs),
+                roundOneDecimal(totalFat)
+        );
+    }
+
+    private Double roundOneDecimal(Double value) {
+        if (value == null) {
+            return 0.0;
+        }
+
+        return Math.round(value * 10.0) / 10.0;
+    }
+
+    private String resolveFoodName(LogDetail detail) {
+
+        if (detail.getFoodNameSnapshot() != null
+                && !detail.getFoodNameSnapshot().trim().isEmpty()) {
+            return detail.getFoodNameSnapshot();
+        }
+
+        if (detail.getFoodItem() != null) {
+            return detail.getFoodItem().getFoodName();
+        }
+
+        return "Unknown food";
     }
 
 }
