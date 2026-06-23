@@ -22,14 +22,18 @@ public class ApplicationInitConfig {
     @Bean
     ApplicationRunner applicationRunner(UserRepository userRepository){
         return args -> {
-            if (userRepository.findByUsername("admin").isEmpty()){
+            if (!userRepository.existsByUsername("admin")){
                 User user = User.builder()
                         .username("admin")
+                        .email("admin@genifit.com")
                         .passwordHash(passwordEncoder.encode("admin"))
                         .role(UserRole.ADMIN)
+                        .isActive(true)
                         .build();
                 userRepository.save(user);
                 log.warn("admin user has been created with default password: admin, please change it");
+            } else {
+                log.info("Admin user already exists. Skipping creation.");
             }
         };
     }
