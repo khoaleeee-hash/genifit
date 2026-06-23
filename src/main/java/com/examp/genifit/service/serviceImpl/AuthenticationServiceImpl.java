@@ -35,6 +35,7 @@ import java.text.ParseException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -212,15 +213,22 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         try {
             GoogleIdToken.Payload payload = googleAuthService.verifyToken(idTokenString);
             String email = payload.getEmail();
-
-            User user = userRepository.findByUsernameAndIsActiveTrue(email).orElseGet(() -> {
-                User newUser = new User();
-                newUser.setUsername(email);
-                newUser.setEmail(email);
-                newUser.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
-                newUser.setRole(UserRole.MEMBER);
-                return userRepository.save(newUser);
-            });
+            Optional<User> existingUserOpt = userRepository.findByEmail(email);
+            User user;
+            if (existingUserOpt.isPresent()) {
+                user = existingUserOpt.get();
+                if (!user.getIsActive()) {
+                    throw new ApiException(ErrorCode.USER_BANNED);
+                }
+            } else {
+                user = new User();
+                user.setUsername(email.split("@")[0] + "_" + UUID.randomUUID().toString().substring(0, 5));
+                user.setEmail(email);
+                user.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
+                user.setRole(UserRole.MEMBER);
+                user.setIsActive(true);
+                user = userRepository.save(user);
+            }
 
             String accessToken = generateToken(user);
             String refreshToken = generateRefreshToken(user);
@@ -231,6 +239,8 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                     .authenticated(true)
                     .build();
 
+        } catch (ApiException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Google authentication failed", e);
             throw new ApiException(ErrorCode.UNAUTHENTICATED);
