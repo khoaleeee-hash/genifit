@@ -18,6 +18,12 @@ public class DailySummaryResponse {
 
     private Double totalCalories;
 
+    private Double totalProtein;
+
+    private Double totalCarbs;
+
+    private Double totalFat;
+
     private Double targetCalories;
 
     private Double progressPercent;
