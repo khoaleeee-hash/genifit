@@ -3,6 +3,8 @@ package com.examp.genifit.service;
 import com.examp.genifit.dto.request.ChangePasswordRequest;
 import com.examp.genifit.dto.request.CreateUserRequest;
 import com.examp.genifit.dto.request.ResetPasswordRequest;
+import com.examp.genifit.dto.request.UpdateUserProfileRequest;
+import com.examp.genifit.dto.response.UserProfileResponse;
 import com.examp.genifit.dto.response.UserResponse;
 
 import java.util.List;
@@ -20,4 +22,5 @@ public interface UserService {
     void deleteMe();
     void deleteUserById(Integer id);
     void generateAndSendOtpForForgotPassword(String email);
+    UserProfileResponse updateMyProfile(UpdateUserProfileRequest request);
 }

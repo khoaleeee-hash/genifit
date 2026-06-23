@@ -70,7 +70,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
     @Override
     public AuthenticationResponse authenticate(AuthenticationRequest request){
-        var user = userRepository.findByUsername(request.getUsername())
+        var user = userRepository.findByUsernameAndIsActiveTrue(request.getUsername())
                 .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
 
         boolean authenticated = passwordEncoder.matches(request.getPassword(),
@@ -152,7 +152,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         var signedJWT = verifyToken(request.getRefreshToken());
 
         var username = signedJWT.getJWTClaimsSet().getSubject();
-        var user = userRepository.findByUsername(username)
+        var user = userRepository.findByUsernameAndIsActiveTrue(username)
                 .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
 
         Date expirationTime = signedJWT.getJWTClaimsSet().getExpirationTime();
@@ -213,7 +213,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             GoogleIdToken.Payload payload = googleAuthService.verifyToken(idTokenString);
             String email = payload.getEmail();
 
-            User user = userRepository.findByUsername(email).orElseGet(() -> {
+            User user = userRepository.findByUsernameAndIsActiveTrue(email).orElseGet(() -> {
                 User newUser = new User();
                 newUser.setUsername(email);
                 newUser.setEmail(email);

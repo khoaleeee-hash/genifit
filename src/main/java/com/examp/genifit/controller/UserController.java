@@ -1,11 +1,9 @@
 package com.examp.genifit.controller;
 
 import com.examp.genifit.common.response.ApiResponse;
-import com.examp.genifit.dto.request.ChangePasswordRequest;
-import com.examp.genifit.dto.request.CreateUserRequest;
-import com.examp.genifit.dto.request.GeminiMealSuggestionRequest;
-import com.examp.genifit.dto.request.ResetPasswordRequest;
+import com.examp.genifit.dto.request.*;
 import com.examp.genifit.dto.response.GeminiMealSuggestionResponse;
+import com.examp.genifit.dto.response.UserProfileResponse;
 import com.examp.genifit.dto.response.UserResponse;
 import com.examp.genifit.service.GeminiMealSuggestionService;
 import com.examp.genifit.service.UserService;
@@ -125,6 +123,14 @@ public class UserController {
         return ApiResponse.success(
                 "Admin đã xóa tài khoản thành công",
                 "Success"
+        );
+    }
+
+    @PutMapping("/me/profile")
+    public ApiResponse<UserProfileResponse> updateMyProfile(@RequestBody UpdateUserProfileRequest request) {
+        return ApiResponse.success(
+                "Cập nhật hồ sơ sức khỏe thành công",
+                userService.updateMyProfile(request)
         );
     }
 }

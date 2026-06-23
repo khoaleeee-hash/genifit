@@ -1,0 +1,18 @@
+package com.examp.genifit.dto.request;
+
+import com.examp.genifit.entity.Gender;
+import com.examp.genifit.entity.GoalType;
+import lombok.AccessLevel;
+import lombok.Data;
+import lombok.experimental.FieldDefaults;
+
+@Data
+@FieldDefaults(level = AccessLevel.PRIVATE)
+public class UpdateUserProfileRequest {
+    Double heightCm;
+    Double weightKg;
+    Integer age;
+    Gender gender;
+    GoalType goal;
+    String activityLevel;
+}
