@@ -1,14 +1,12 @@
 package com.examp.genifit.controller;
 
 import com.examp.genifit.common.response.ApiResponse;
-import com.examp.genifit.dto.request.AuthenticationRequest;
-import com.examp.genifit.dto.request.IntrospectRequest;
-import com.examp.genifit.dto.request.LogoutRequest;
-import com.examp.genifit.dto.request.RefreshTokenRequest;
+import com.examp.genifit.dto.request.*;
 import com.examp.genifit.dto.response.AuthenticationResponse;
 import com.examp.genifit.dto.response.IntrospectResponse;
 import com.examp.genifit.service.AuthenticationService;
 import com.nimbusds.jose.JOSEException;
+import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -62,9 +60,8 @@ public class AuthenticationController {
     }
 
     @PostMapping("/google")
-    public ApiResponse<AuthenticationResponse> loginWithGoogle(@RequestBody Map<String, String> request) {
-        String idTokenString = request.get("idToken");
-        AuthenticationResponse response = authenticationService.authenticateWithGoogle(idTokenString);
+    public ApiResponse<AuthenticationResponse> loginWithGoogle(@RequestBody @Valid GoogleLoginRequest request) {
+        AuthenticationResponse response = authenticationService.authenticateWithGoogle(request.getIdToken());
         return ApiResponse.success("Logged in Successfully!", response);
     }
 }

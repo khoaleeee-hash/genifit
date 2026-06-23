@@ -14,6 +14,8 @@ public enum ErrorCode {
 
     USER_EXISTED(HttpStatus.BAD_REQUEST, "USER_002", "User already existed"),
 
+    USER_BANNED(HttpStatus.BAD_REQUEST, "USER_003", "User is banned"),
+
     FOOD_NOT_FOUND(HttpStatus.NOT_FOUND, "FOOD_001", "Food not found"),
 
     DAILY_LOG_NOT_FOUND(HttpStatus.NOT_FOUND, "DL_001", "Daily log not found"),
