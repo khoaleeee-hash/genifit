@@ -148,6 +148,37 @@ public class DailyLogServiceImpl implements DailyLogService {
 
     @Override
     @Transactional(readOnly = true)
+    public MealHistoryResponse getMealHistory(String username, LocalDate date) {
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy user đang đăng nhập"));
+
+        LocalDate targetDate = date == null ? LocalDate.now() : date;
+
+        DailyLog dailyLog = dailyLogRepository
+                .findByUser_UserIdAndLogDate(user.getUserId(), targetDate)
+                .orElseThrow(() -> new ApiException(ErrorCode.DAILY_LOG_NOT_FOUND));
+
+        List<MealHistoryResponse.MealItem> meals = dailyLog.getLogDetails()
+                .stream()
+                .map(this::mapToMealHistoryItem)
+                .toList();
+
+        return MealHistoryResponse.builder()
+                .date(dailyLog.getLogDate())
+                .totalCalories(safeDouble(dailyLog.getTotalCalories()))
+                .targetCalories(resolveTargetCalories(dailyLog.getTargetCalories()))
+                .statusColor(
+                        dailyLog.getStatusColor() != null
+                                ? dailyLog.getStatusColor()
+                                : calculateStatusColor(dailyLog.getTotalCalories(), dailyLog.getTargetCalories())
+                )
+                .meals(meals)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public DailyCaloriesResponse getTodayCalories(Integer userId) {
 
         LocalDate today = LocalDate.now();
@@ -685,6 +716,44 @@ public class DailyLogServiceImpl implements DailyLogService {
         }
 
         return "Unknown food";
+    }
+
+    private MealHistoryResponse.MealItem mapToMealHistoryItem(LogDetail detail) {
+
+        Integer foodId = null;
+        Integer scanId = null;
+
+        if (detail.getFoodItem() != null) {
+            foodId = detail.getFoodItem().getFoodId();
+        }
+
+        if (detail.getScanHistory() != null) {
+            scanId = detail.getScanHistory().getScanId();
+        }
+
+        String foodName = detail.getFoodNameSnapshot();
+
+        if ((foodName == null || foodName.isBlank()) && detail.getFoodItem() != null) {
+            foodName = detail.getFoodItem().getFoodName();
+        }
+
+        if ((foodName == null || foodName.isBlank()) && detail.getScanHistory() != null) {
+            foodName = detail.getScanHistory().getDetectedFood();
+        }
+
+        return MealHistoryResponse.MealItem.builder()
+                .detailId(detail.getDetailId())
+                .foodId(foodId)
+                .scanId(scanId)
+                .foodName(foodName)
+                .quantity(detail.getQuantity())
+                .calories(detail.getCalories())
+                .fat(detail.getFat())
+                .carbs(detail.getCarbs())
+                .protein(detail.getProtein())
+                .mealTime(detail.getMealTime())
+                .source(detail.getSource() != null ? detail.getSource().name() : null)
+                .build();
     }
 
 }

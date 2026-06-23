@@ -44,6 +44,18 @@ public class DailyLogController {
         return dailyLogService.addManualFood(username, request);
     }
 
+    @GetMapping("/meals/history")
+    @Operation(summary = "Lấy lịch sử thức ăn theo ngày/hôm nay")
+    public MealHistoryResponse getMealHistory(
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate date,
+            Authentication authentication
+    ) {
+        String username = authentication.getName();
+        return dailyLogService.getMealHistory(username, date);
+    }
+
     @GetMapping("/today")
     @Operation(summary = "Get today calories")
     public ResponseEntity<ApiResponse<DailyCaloriesResponse>> getTodayCalories(@AuthenticationPrincipal Jwt jwt) {
