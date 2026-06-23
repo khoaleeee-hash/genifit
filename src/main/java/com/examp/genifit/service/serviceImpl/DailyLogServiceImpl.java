@@ -41,7 +41,7 @@ public class DailyLogServiceImpl implements DailyLogService {
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy user đang đăng nhập"));
 
         if (request.getQuantity() == null || request.getQuantity() <= 0) {
-            throw new RuntimeException("Số lượng món ăn phải lớn hơn 0");
+            throw new IllegalArgumentException("Số lượng món ăn phải lớn hơn 0");
         }
 
         ResolvedFoodInfo foodInfo = resolveFoodInfo(user, request);
@@ -100,7 +100,11 @@ public class DailyLogServiceImpl implements DailyLogService {
         logDetail.setFat(addedFat);
         logDetail.setCarbs(addedCarbs);
         logDetail.setProtein(addedProtein);
-        logDetail.setSource(FoodSource.MANUAL);
+        if (foodInfo.getScanId() != null) {
+            logDetail.setSource(FoodSource.SCAN);
+        } else {
+            logDetail.setSource(FoodSource.MANUAL);
+        }
         logDetail.setMealTime(mealTime);
         logDetail.setCreatedAt(LocalDateTime.now());
 
@@ -415,10 +419,9 @@ public class DailyLogServiceImpl implements DailyLogService {
 
     private ResolvedFoodInfo resolveFoodInfo(User user, AddManualFoodRequest request) {
 
-        boolean hasFoodId = request.getFoodId() != null;
-        boolean hasScanId = request.getScanId() != null;
-        boolean hasFoodName = request.getFoodName() != null
-                && !request.getFoodName().trim().isEmpty();
+        boolean hasFoodId = isValidId(request.getFoodId());
+        boolean hasScanId = isValidId(request.getScanId());
+        boolean hasFoodName = isRealFoodName(request.getFoodName());
 
         int sourceCount = 0;
 
@@ -435,11 +438,15 @@ public class DailyLogServiceImpl implements DailyLogService {
         }
 
         if (sourceCount == 0) {
-            throw new RuntimeException("Vui lòng truyền foodId, scanId hoặc foodName");
+            throw new IllegalArgumentException(
+                    "Vui lòng truyền foodId > 0 hoặc scanId > 0 hoặc foodName hợp lệ"
+            );
         }
 
         if (sourceCount > 1) {
-            throw new RuntimeException("Chỉ được truyền một trong ba: foodId, scanId hoặc foodName");
+            throw new IllegalArgumentException(
+                    "Chỉ được truyền một trong ba: foodId, scanId hoặc foodName"
+            );
         }
 
         if (hasFoodId) {
@@ -503,28 +510,16 @@ public class DailyLogServiceImpl implements DailyLogService {
                 .build();
     }
 
-    private void validateManualNutrition(AddManualFoodRequest request) {
-
-        if (request.getFoodName() == null || request.getFoodName().trim().isEmpty()) {
-            throw new RuntimeException("foodName is required");
-        }
-
-        if (request.getCalories() == null || request.getCalories() < 0) {
-            throw new RuntimeException("calories is required and must be >= 0");
-        }
-
-        if (request.getFat() == null || request.getFat() < 0) {
-            throw new RuntimeException("fat is required and must be >= 0");
-        }
-
-        if (request.getCarbs() == null || request.getCarbs() < 0) {
-            throw new RuntimeException("carbs is required and must be >= 0");
-        }
-
-        if (request.getProtein() == null || request.getProtein() < 0) {
-            throw new RuntimeException("protein is required and must be >= 0");
-        }
+    private boolean isValidId(Integer id) {
+        return id != null && id > 0;
     }
+
+    private boolean isRealFoodName(String foodName) {
+        return foodName != null
+                && !foodName.trim().isEmpty()
+                && !"string".equalsIgnoreCase(foodName.trim());
+    }
+
     private ResolvedFoodInfo resolveFromManualInput(AddManualFoodRequest request) {
 
         validateManualNutrition(request);
@@ -538,6 +533,29 @@ public class DailyLogServiceImpl implements DailyLogService {
                 .carbs(request.getCarbs())
                 .protein(request.getProtein())
                 .build();
+    }
+
+    private void validateManualNutrition(AddManualFoodRequest request) {
+
+        if (!isRealFoodName(request.getFoodName())) {
+            throw new IllegalArgumentException("foodName không hợp lệ");
+        }
+
+        if (request.getCalories() == null || request.getCalories() <= 0) {
+            throw new IllegalArgumentException("calories is required and must be > 0");
+        }
+
+        if (request.getFat() == null || request.getFat() < 0) {
+            throw new IllegalArgumentException("fat is required and must be >= 0");
+        }
+
+        if (request.getCarbs() == null || request.getCarbs() < 0) {
+            throw new IllegalArgumentException("carbs is required and must be >= 0");
+        }
+
+        if (request.getProtein() == null || request.getProtein() < 0) {
+            throw new IllegalArgumentException("protein is required and must be >= 0");
+        }
     }
 
 }
