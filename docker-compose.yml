@@ -15,6 +15,7 @@ services:
       - "8080:8080"
     restart: on-failure:5        # tự restart nếu crash, tối đa 5 lần
     environment:
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE}
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD}
