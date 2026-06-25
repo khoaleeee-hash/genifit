@@ -1,8 +1,11 @@
 package com.examp.genifit.service.serviceImpl;
 
 import com.examp.genifit.dto.request.CreateAdminFoodRequest;
+import com.examp.genifit.dto.request.FoodFilterRequest;
 import com.examp.genifit.dto.request.UpdateFoodRequest;
 import com.examp.genifit.dto.response.FoodResponse;
+import com.examp.genifit.dto.response.PageInfoResponse;
+import com.examp.genifit.dto.response.PageResponse;
 import com.examp.genifit.entity.FoodApprovalStatus;
 import com.examp.genifit.entity.FoodItem;
 import com.examp.genifit.entity.User;
@@ -11,9 +14,11 @@ import com.examp.genifit.repository.FoodItemRepository;
 import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.service.FoodService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -22,27 +27,122 @@ public class FoodServiceImpl implements FoodService {
     private final FoodItemRepository foodItemRepository;
     private final UserRepository userRepository;
 
-    @Override
-    public List<FoodResponse> getAllFoods() {
-        return foodItemRepository
-                .findByIsPublicTrueAndApprovalStatus(FoodApprovalStatus.APPROVED)
-                .stream()
-                .map(FoodResponse::new)
-                .toList();
-    }
+//    @Override
+//    public PageResponse<FoodResponse> getAllFoods(int pageNum, int pageSize) {
+//        Pageable pageable = buildPageable(pageNum, pageSize);
+//
+//        Page<FoodResponse> foodPage = foodItemRepository.findByDeletedFalse(pageable)
+//                .map(FoodResponse::new);
+//
+//        return buildPageResponse(foodPage);
+//    }
+
+//    @Override
+//    public PageResponse<FoodResponse> searchFoods(String keyword, int pageNum, int pageSize) {
+//        Pageable pageable = buildPageable(pageNum, pageSize);
+//
+//        Page<FoodResponse> foodPage;
+//
+//        if (keyword == null || keyword.trim().isEmpty()) {
+//            foodPage = foodItemRepository.findByDeletedFalse(pageable)
+//                    .map(FoodResponse::new);
+//        } else {
+//            foodPage = foodItemRepository
+//                    .findByFoodNameContainingIgnoreCaseAndDeletedFalse(keyword.trim(), pageable)
+//                    .map(FoodResponse::new);
+//        }
+//
+//        return buildPageResponse(foodPage);
+//    }
 
     @Override
-    public List<FoodResponse> searchFoods(String keyword) {
-        if (keyword == null || keyword.trim().isEmpty()) {
-            return getAllFoods();
+    public PageResponse<FoodResponse> filterFoods(FoodFilterRequest request) {
+        int pageNum = 1;
+        int pageSize = 10;
+
+        FoodFilterRequest.SearchCondition condition = null;
+
+        if (request != null) {
+            condition = request.getSearchCondition();
+
+            if (request.getPageInfo() != null) {
+                if (request.getPageInfo().getPageNum() != null) {
+                    pageNum = request.getPageInfo().getPageNum();
+                }
+
+                if (request.getPageInfo().getPageSize() != null) {
+                    pageSize = request.getPageInfo().getPageSize();
+                }
+            }
         }
 
-        return foodItemRepository.findByFoodNameContainingIgnoreCase(keyword.trim())
-                .stream()
-                .filter(food -> Boolean.TRUE.equals(food.getIsPublic()))
-                .filter(food -> food.getApprovalStatus() == FoodApprovalStatus.APPROVED)
-                .map(FoodResponse::new)
-                .toList();
+        Pageable pageable = buildPageable(pageNum, pageSize);
+
+        Integer foodId = null;
+        String keyword = null;
+
+        Double calories = null;
+        Double caloriesFrom = null;
+        Double caloriesTo = null;
+
+        Double proteinFrom = null;
+        Double proteinTo = null;
+        Double carbsFrom = null;
+        Double carbsTo = null;
+        Double fatFrom = null;
+        Double fatTo = null;
+
+        Boolean isPublic = null;
+        Boolean isDeleted = false;
+
+        if (condition != null) {
+            foodId = parseInteger(condition.getFoodId());
+
+            if (!isBlankOrSwaggerDefault(condition.getKeyword())) {
+                keyword = condition.getKeyword().trim();
+            }
+
+            calories = parseDouble(condition.getCalories());
+            caloriesFrom = parseDouble(condition.getCaloriesFrom());
+            caloriesTo = parseDouble(condition.getCaloriesTo());
+
+            proteinFrom = parseDouble(condition.getProteinFrom());
+            proteinTo = parseDouble(condition.getProteinTo());
+
+            carbsFrom = parseDouble(condition.getCarbsFrom());
+            carbsTo = parseDouble(condition.getCarbsTo());
+
+            fatFrom = parseDouble(condition.getFatFrom());
+            fatTo = parseDouble(condition.getFatTo());
+
+            isPublic = parseBoolean(condition.getIsPublic());
+
+            Boolean inputDeleted = parseBoolean(condition.getIsDeleted());
+            if (inputDeleted != null) {
+                isDeleted = inputDeleted;
+            }
+        }
+
+        Page<FoodResponse> foodPage = foodItemRepository
+                .filterFoods(
+                        foodId,
+                        keyword,
+                        calories,
+                        caloriesFrom,
+                        caloriesTo,
+                        proteinFrom,
+                        proteinTo,
+                        carbsFrom,
+                        carbsTo,
+                        fatFrom,
+                        fatTo,
+                        isPublic,
+                        isDeleted,
+                        pageable
+                )
+                .map(FoodResponse::new);
+
+        return buildPageResponse(foodPage);
     }
 
     @Override
@@ -57,7 +157,7 @@ public class FoodServiceImpl implements FoodService {
         }
 
         foodItemRepository
-                .findByFoodNameIgnoreCaseAndIsPublicTrueAndApprovalStatus(
+                .findByFoodNameIgnoreCaseAndIsPublicTrueAndApprovalStatusAndDeletedFalse(
                         request.getFoodName().trim(),
                         FoodApprovalStatus.APPROVED
                 )
@@ -84,7 +184,8 @@ public class FoodServiceImpl implements FoodService {
 
     @Override
     public FoodResponse updateFood(Integer foodId, UpdateFoodRequest request) {
-        FoodItem foodItem = foodItemRepository.findById(foodId)
+
+        FoodItem foodItem = foodItemRepository.findByFoodIdAndDeletedFalse(foodId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn"));
 
         validateUpdateFood(request);
@@ -130,27 +231,86 @@ public class FoodServiceImpl implements FoodService {
     public void softDeleteFood(Integer foodId) {
         FoodItem foodItem = foodItemRepository.findById(foodId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn"));
+
+        if (Boolean.TRUE.equals(foodItem.getDeleted())) {
+            throw new RuntimeException("Món ăn này đã được xoá trước đó");
+        }
+
+        foodItem.setDeleted(true);
         foodItem.setIsPublic(false);
-        foodItem.setApprovalStatus(FoodApprovalStatus.REJECTED);
+
         foodItemRepository.save(foodItem);
+    }
+
+    private Integer parseInteger(String value) {
+        if (isBlankOrSwaggerDefault(value)) {
+            return null;
+        }
+
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            throw new RuntimeException("Giá trị số nguyên không hợp lệ: " + value);
+        }
+    }
+
+    private Double parseDouble(String value) {
+        if (isBlankOrSwaggerDefault(value)) {
+            return null;
+        }
+
+        try {
+            return Double.parseDouble(value.trim());
+        } catch (NumberFormatException e) {
+            throw new RuntimeException("Giá trị số thực không hợp lệ: " + value);
+        }
+    }
+
+    private Boolean parseBoolean(String value) {
+        if (isBlankOrSwaggerDefault(value)) {
+            return null;
+        }
+
+        String trimmedValue = value.trim().toLowerCase();
+
+        if ("true".equals(trimmedValue)) {
+            return true;
+        }
+
+        if ("false".equals(trimmedValue)) {
+            return false;
+        }
+
+        throw new RuntimeException("Giá trị boolean không hợp lệ, chỉ được nhập true hoặc false: " + value);
+    }
+
+    private boolean isBlankOrSwaggerDefault(String value) {
+        return value == null
+                || value.trim().isEmpty()
+                || "string".equalsIgnoreCase(value.trim());
     }
 
     private void validateCreateFood(CreateAdminFoodRequest request) {
         if (request.getAdminId() == null) {
             throw new RuntimeException("AdminId không được để trống");
         }
+
         if (request.getFoodName() == null || request.getFoodName().trim().isEmpty()) {
             throw new RuntimeException("Tên món ăn không được để trống");
         }
+
         if (request.getCalories() == null || request.getCalories() < 0) {
             throw new RuntimeException("Calories không hợp lệ");
         }
+
         if (request.getProtein() != null && request.getProtein() < 0) {
             throw new RuntimeException("Protein không hợp lệ");
         }
+
         if (request.getCarbs() != null && request.getCarbs() < 0) {
             throw new RuntimeException("Carbs không hợp lệ");
         }
+
         if (request.getFat() != null && request.getFat() < 0) {
             throw new RuntimeException("Fat không hợp lệ");
         }
@@ -173,4 +333,53 @@ public class FoodServiceImpl implements FoodService {
             throw new RuntimeException("Fat không hợp lệ");
         }
     }
+
+    private Pageable buildPageable(int pageNum, int pageSize) {
+        if (pageNum <= 0) {
+            pageNum = 1;
+        }
+
+        if (pageSize <= 0) {
+            pageSize = 10;
+        }
+
+        if (pageSize > 50) {
+            pageSize = 50;
+        }
+
+        int springPageIndex = pageNum - 1;
+
+        return PageRequest.of(
+                springPageIndex,
+                pageSize,
+                Sort.by(Sort.Direction.ASC, "foodId")
+        );
+    }
+
+//    private PageResponse<FoodResponse> buildPageResponse(Page<FoodResponse> page) {
+//        PageInfoResponse pageInfo = new PageInfoResponse(
+//                page.getNumber() + 1,
+//                page.getSize(),
+//                page.getTotalPages(),
+//                page.getTotalElements()
+//        );
+//
+//        return new PageResponse<>(
+//                page.getContent(),
+//                pageInfo
+//        );
+//    }
+    private PageResponse<FoodResponse> buildPageResponse(Page<FoodResponse> page) {
+        PageInfoResponse pageInfo = PageInfoResponse.builder()
+                .pageNum(page.getNumber() + 1)
+                .pageSize(page.getSize())
+                .totalPage(page.getTotalPages())
+                .totalItem(page.getTotalElements())
+                .build();
+
+        return new PageResponse<>(
+                page.getContent(),
+                pageInfo
+        );
+}
 }

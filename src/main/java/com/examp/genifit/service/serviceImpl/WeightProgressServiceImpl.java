@@ -3,6 +3,7 @@ package com.examp.genifit.service.serviceImpl;
 import com.examp.genifit.common.exception.ApiException;
 import com.examp.genifit.common.exception.ErrorCode;
 import com.examp.genifit.dto.request.UpdateWeightProgressRequest;
+import com.examp.genifit.dto.response.WeightProgressHistoryResponse;
 import com.examp.genifit.dto.response.WeightProgressResponse;
 import com.examp.genifit.entity.AdvancedProfile;
 import com.examp.genifit.entity.ProgressStatus;
@@ -15,6 +16,10 @@ import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.repository.WeightProgressRepository;
 import com.examp.genifit.service.WeightProgressService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -92,6 +97,21 @@ public class WeightProgressServiceImpl implements WeightProgressService {
                 .progressStatus(progressStatus)
                 .message(buildProgressMessage(progressStatus, differencePercent))
                 .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<WeightProgressHistoryResponse> getWeightProgressHistory(Integer userId, Integer pageNum, Integer pageSize) {
+        if (!userRepository.existsById(userId)) {
+            throw new ApiException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        Pageable pageable = PageRequest.of(pageNum, pageSize,
+                Sort.by(Sort.Direction.DESC, "recordedDate")
+                        .and(Sort.by(Sort.Direction.DESC, "createdAt")));
+
+        return weightProgressRepository.findAllByUser_UserId(userId, pageable)
+                .map(this::mapToWeightProgressHistoryResponse);
     }
 
     private void validateProgressConfig(Double startWeight, Double targetWeight,
@@ -193,5 +213,18 @@ public class WeightProgressServiceImpl implements WeightProgressService {
 
     private double roundOneDecimal(double value) {
         return Math.round(value * 10.0) / 10.0;
+    }
+
+    private WeightProgressHistoryResponse mapToWeightProgressHistoryResponse(
+            WeightProgress progress
+    ) {
+        return WeightProgressHistoryResponse.builder()
+                .progressId(progress.getProgressId())
+                .recordedDate(progress.getRecordedDate())
+                .currentWeight(progress.getCurrentWeight())
+                .progressPercent(progress.getProgressPercent())
+                .progressStatus(progress.getProgressStatus())
+                .createdAt(progress.getCreatedAt())
+                .build();
     }
 }

@@ -2,6 +2,7 @@ package com.examp.genifit.service.serviceImpl;
 
 import com.examp.genifit.common.exception.ApiException;
 import com.examp.genifit.common.exception.ErrorCode;
+import com.examp.genifit.dto.info.ResolvedFoodInfo;
 import com.examp.genifit.dto.response.*;
 import com.examp.genifit.dto.request.AddManualFoodRequest;
 import com.examp.genifit.entity.*;
@@ -30,67 +31,92 @@ public class DailyLogServiceImpl implements DailyLogService {
     private final GuestRepository guestRepository;
     private final UserRepository userRepository;
     private final LogDetailRepository logDetailRepository;
+    private final AIScanHistoryRepository aiScanHistoryRepository;
 
     @Override
-    public AddManualFoodResponse addManualFood(AddManualFoodRequest request) {
+    @Transactional
+    public AddManualFoodResponse addManualFood(String username, AddManualFoodRequest request) {
 
-        if (request.getUserId() == null && request.getGuestId() == null) {
-            throw new RuntimeException("Cần truyền userId hoặc guestId");
-        }
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy user đang đăng nhập"));
 
         if (request.getQuantity() == null || request.getQuantity() <= 0) {
-            throw new RuntimeException("Số lượng món ăn phải lớn hơn 0");
+            throw new IllegalArgumentException("Số lượng món ăn phải lớn hơn 0");
         }
 
-        FoodItem foodItem = findFoodItem(request);
+        ResolvedFoodInfo foodInfo = resolveFoodInfo(user, request);
 
         LocalDate today = LocalDate.now();
-        DailyLog dailyLog;
 
-        if (request.getUserId() != null) {
-            User user = userRepository.findById(request.getUserId())
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy user"));
-
-            dailyLog = dailyLogRepository
-                    .findByUser_UserIdAndLogDate(request.getUserId(), today)
-                    .orElseGet(() -> createDailyLogForUser(user));
-        } else {
-            Guest guest = guestRepository.findById(request.getGuestId())
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy guest"));
-
-            dailyLog = dailyLogRepository
-                    .findByGuest_GuestIdAndLogDate(request.getGuestId(), today)
-                    .orElseGet(() -> createDailyLogForGuest(guest));
-        }
+        DailyLog dailyLog = dailyLogRepository
+                .findByUser_UserIdAndLogDate(user.getUserId(), today)
+                .orElseGet(() -> createDailyLogForUser(user));
 
         MealTime mealTime = request.getMealTime() == null
                 ? MealTime.SNACK
                 : request.getMealTime();
 
-        boolean isDuplicate = logDetailRepository
-                .existsByDailyLog_LogIdAndFoodItem_FoodIdAndMealTime(
-                        dailyLog.getLogId(),
-                        foodItem.getFoodId(),
-                        mealTime
-                );
+        FoodItem foodItem = null;
 
-        double addedCalories = foodItem.getCalories() * request.getQuantity();
+        if (foodInfo.getFoodId() != null) {
+            foodItem = foodItemRepository.findById(foodInfo.getFoodId())
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn với foodId: " + foodInfo.getFoodId()));
+        }
+
+        boolean isDuplicate = false;
+
+        if (foodInfo.getFoodId() != null) {
+            isDuplicate = logDetailRepository
+                    .existsByDailyLog_LogIdAndFoodItem_FoodIdAndMealTime(
+                            dailyLog.getLogId(),
+                            foodInfo.getFoodId(),
+                            mealTime
+                    );
+        }
+        else {
+            isDuplicate = logDetailRepository
+                    .existsByDailyLog_LogIdAndFoodNameSnapshotIgnoreCaseAndMealTime(
+                            dailyLog.getLogId(),
+                            foodInfo.getFoodName(),
+                            mealTime
+                    );
+        }
+
+        double quantity = request.getQuantity();
+
+        double addedCalories = safeDouble(foodInfo.getCalories()) * quantity;
+        double addedFat = safeDouble(foodInfo.getFat()) * quantity;
+        double addedCarbs = safeDouble(foodInfo.getCarbs()) * quantity;
+        double addedProtein = safeDouble(foodInfo.getProtein()) * quantity;
 
         LogDetail logDetail = new LogDetail();
         logDetail.setDailyLog(dailyLog);
+
         logDetail.setFoodItem(foodItem);
-        logDetail.setQuantity(request.getQuantity());
+
+        logDetail.setFoodNameSnapshot(foodInfo.getFoodName());
+        logDetail.setQuantity(quantity);
         logDetail.setCalories(addedCalories);
-        logDetail.setSource(FoodSource.MANUAL);
+        logDetail.setFat(addedFat);
+        logDetail.setCarbs(addedCarbs);
+        logDetail.setProtein(addedProtein);
+        if (foodInfo.getScanId() != null) {
+            logDetail.setSource(FoodSource.SCAN);
+        } else {
+            logDetail.setSource(FoodSource.MANUAL);
+        }
         logDetail.setMealTime(mealTime);
         logDetail.setCreatedAt(LocalDateTime.now());
 
+        if(foodInfo.getScanId() != null) {
+            AIScanHistory scanHistory = aiScanHistoryRepository.findById(foodInfo.getScanId())
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy lịch sử scan với scanId: " + foodInfo.getScanId()));
+
+            logDetail.setScanHistory(scanHistory);
+        }
         logDetailRepository.save(logDetail);
 
-        double currentTotal = dailyLog.getTotalCalories() == null
-                ? 0
-                : dailyLog.getTotalCalories();
-
+        double currentTotal = safeDouble(dailyLog.getTotalCalories());
         double newTotal = currentTotal + addedCalories;
 
         dailyLog.setTotalCalories(newTotal);
@@ -110,8 +136,8 @@ public class DailyLogServiceImpl implements DailyLogService {
 
         return new AddManualFoodResponse(
                 message,
-                foodItem.getFoodName(),
-                request.getQuantity(),
+                foodInfo.getFoodName(),
+                quantity,
                 addedCalories,
                 newTotal,
                 dailyLog.getStatusColor().name(),
@@ -122,34 +148,107 @@ public class DailyLogServiceImpl implements DailyLogService {
 
     @Override
     @Transactional(readOnly = true)
-    public DailyCaloriesResponse getTodayCalories(Integer userId) {
+    public MealHistoryResponse getMealHistory(String username, LocalDate date) {
 
-        DailyLog dailyLog = dailyLogRepository.findByUser_UserIdAndLogDate(userId, LocalDate.now())
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy user đang đăng nhập"));
+
+        LocalDate targetDate = date == null ? LocalDate.now() : date;
+
+        DailyLog dailyLog = dailyLogRepository
+                .findByUser_UserIdAndLogDate(user.getUserId(), targetDate)
                 .orElseThrow(() -> new ApiException(ErrorCode.DAILY_LOG_NOT_FOUND));
 
-        return DailyCaloriesResponse.builder()
+        List<MealHistoryResponse.MealItem> meals = dailyLog.getLogDetails()
+                .stream()
+                .map(this::mapToMealHistoryItem)
+                .toList();
+
+        return MealHistoryResponse.builder()
                 .date(dailyLog.getLogDate())
-                .totalCalories(dailyLog.getTotalCalories())
-                .targetCalories(dailyLog.getTargetCalories())
-                .statusColor(dailyLog.getStatusColor())
+                .totalCalories(safeDouble(dailyLog.getTotalCalories()))
+                .targetCalories(resolveTargetCalories(dailyLog.getTargetCalories()))
+                .statusColor(
+                        dailyLog.getStatusColor() != null
+                                ? dailyLog.getStatusColor()
+                                : calculateStatusColor(dailyLog.getTotalCalories(), dailyLog.getTargetCalories())
+                )
+                .meals(meals)
                 .build();
     }
 
     @Override
     @Transactional(readOnly = true)
-    public DailyLogResponse getCaloriesByDate(Integer userId, LocalDate date) {
+    public DailyCaloriesResponse getTodayCalories(Integer userId) {
 
-        DailyLog dailyLog = dailyLogRepository.findByUser_UserIdAndLogDate(userId, date)
+        LocalDate today = LocalDate.now();
+
+        DailyLog dailyLog = dailyLogRepository
+                .findByUser_UserIdAndLogDate(userId, today)
                 .orElseThrow(() -> new ApiException(ErrorCode.DAILY_LOG_NOT_FOUND));
+
+        NutritionTotals totals = calculateNutritionTotals(dailyLog);
+
+        Double targetCalories = resolveTargetCalories(dailyLog.getTargetCalories());
+
+        Double progressPercent = calculateProgressPercent(
+                totals.calories,
+                targetCalories
+        );
+
+        StatusColor statusColor = calculateStatusColor(
+                totals.calories,
+                targetCalories
+        );
+
+        return DailyCaloriesResponse.builder()
+                .date(dailyLog.getLogDate())
+                .totalCalories(totals.calories)
+                .totalProtein(totals.protein)
+                .totalCarbs(totals.carbs)
+                .totalFat(totals.fat)
+                .targetCalories(targetCalories)
+                .progressPercent(progressPercent)
+                .statusColor(statusColor)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DailyLogResponse getCaloriesByDate(
+            Integer userId,
+            LocalDate date
+    ) {
+
+        DailyLog dailyLog = dailyLogRepository
+                .findByUser_UserIdAndLogDate(userId, date)
+                .orElseThrow(() -> new ApiException(ErrorCode.DAILY_LOG_NOT_FOUND));
+
+        NutritionTotals totals = calculateNutritionTotals(dailyLog);
+
+        Double targetCalories = resolveTargetCalories(dailyLog.getTargetCalories());
+
+        Double progressPercent = calculateProgressPercent(
+                totals.calories,
+                targetCalories
+        );
+
+        StatusColor statusColor = calculateStatusColor(
+                totals.calories,
+                targetCalories
+        );
 
         List<DailyLogResponse.FoodDetail> foods = dailyLog.getLogDetails()
                 .stream()
                 .map(detail ->
                         DailyLogResponse.FoodDetail
                                 .builder()
-                                .foodName(detail.getFoodItem().getFoodName())
-                                .quantity(detail.getQuantity())
-                                .calories(detail.getCalories())
+                                .foodName(resolveFoodName(detail))
+                                .quantity(safeDouble(detail.getQuantity()))
+                                .calories(roundOneDecimal(detail.getCalories()))
+                                .protein(roundOneDecimal(detail.getProtein()))
+                                .carbs(roundOneDecimal(detail.getCarbs()))
+                                .fat(roundOneDecimal(detail.getFat()))
                                 .mealTime(detail.getMealTime())
                                 .build()
                 )
@@ -157,34 +256,14 @@ public class DailyLogServiceImpl implements DailyLogService {
 
         return DailyLogResponse.builder()
                 .date(dailyLog.getLogDate())
-                .totalCalories(dailyLog.getTotalCalories())
-                .targetCalories(dailyLog.getTargetCalories())
-                .statusColor(dailyLog.getStatusColor())
-                .foods(foods)
-                .build();
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public HomeStatusResponse getHomeStatus(Integer userId) {
-
-        LocalDate today = LocalDate.now();
-
-        DailyLog dailyLog = dailyLogRepository.findByUser_UserIdAndLogDate(userId, today)
-                .orElseThrow(() -> new ApiException(ErrorCode.DAILY_LOG_NOT_FOUND));
-
-        Double totalCalories = safeDouble(dailyLog.getTotalCalories());
-        Double targetCalories = resolveTargetCalories(dailyLog.getTargetCalories());
-
-        double progressPercent = calculateProgressPercent(totalCalories, targetCalories);
-
-        StatusColor statusColor = calculateStatusColor(totalCalories, targetCalories);
-
-        return HomeStatusResponse.builder()
-                .totalCalories(totalCalories)
+                .totalCalories(totals.calories)
+                .totalProtein(totals.protein)
+                .totalCarbs(totals.carbs)
+                .totalFat(totals.fat)
                 .targetCalories(targetCalories)
                 .progressPercent(progressPercent)
                 .statusColor(statusColor)
+                .foods(foods)
                 .build();
     }
 
@@ -252,17 +331,15 @@ public class DailyLogServiceImpl implements DailyLogService {
 
     private FoodItem findFoodItem(AddManualFoodRequest request) {
 
-        if (request.getFoodId() != null) {
-            return foodItemRepository.findById(request.getFoodId())
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn"));
+        String foodName = request.getFoodName();
+
+        if (foodName == null || foodName.trim().isEmpty()) {
+            throw new RuntimeException("Cần truyền tên món ăn");
         }
 
-        if (request.getFoodName() != null && !request.getFoodName().trim().isEmpty()) {
-            return foodItemRepository.findByFoodNameIgnoreCase(request.getFoodName().trim())
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn có tên: " + request.getFoodName()));
-        }
-
-        throw new RuntimeException("Cần truyền foodId hoặc foodName");
+        return foodItemRepository
+                .findByFoodNameIgnoreCaseAndDeletedFalse(foodName.trim())
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn có tên: " + foodName));
     }
 
     private DailyLog createDailyLogForUser(User user) {
@@ -312,23 +389,27 @@ public class DailyLogServiceImpl implements DailyLogService {
         }
     }
 
-    //Helper cho monthly và weekly chart
     private DailySummaryResponse mapToDailySummaryResponse(DailyLog log) {
 
-        Double totalCalories = safeDouble(log.getTotalCalories());
+        NutritionTotals totals = calculateNutritionTotals(log);
+
         Double targetCalories = resolveTargetCalories(log.getTargetCalories());
+
         Double progressPercent = calculateProgressPercent(
-                totalCalories,
+                totals.calories,
                 targetCalories
         );
 
         StatusColor statusColor = log.getStatusColor() != null
                 ? log.getStatusColor()
-                : calculateStatusColor(totalCalories, targetCalories);
+                : calculateStatusColor(totals.calories, targetCalories);
 
         return DailySummaryResponse.builder()
                 .date(log.getLogDate())
-                .totalCalories(totalCalories)
+                .totalCalories(totals.calories)
+                .totalProtein(totals.protein)
+                .totalCarbs(totals.carbs)
+                .totalFat(totals.fat)
                 .targetCalories(targetCalories)
                 .progressPercent(progressPercent)
                 .statusColor(statusColor)
@@ -337,21 +418,26 @@ public class DailyLogServiceImpl implements DailyLogService {
 
     private WeeklyChartPointResponse mapToWeeklyChartPoint(DailyLog log) {
 
-        Double totalCalories = safeDouble(log.getTotalCalories());
+        NutritionTotals totals = calculateNutritionTotals(log);
+
         Double targetCalories = resolveTargetCalories(log.getTargetCalories());
+
         Double progressPercent = calculateProgressPercent(
-                totalCalories,
+                totals.calories,
                 targetCalories
         );
 
         StatusColor statusColor = log.getStatusColor() != null
                 ? log.getStatusColor()
-                : calculateStatusColor(totalCalories, targetCalories);
+                : calculateStatusColor(totals.calories, targetCalories);
 
         return WeeklyChartPointResponse.builder()
                 .date(log.getLogDate())
                 .label(formatChartLabel(log.getLogDate()))
-                .totalCalories(totalCalories)
+                .totalCalories(totals.calories)
+                .totalProtein(totals.protein)
+                .totalCarbs(totals.carbs)
+                .totalFat(totals.fat)
                 .targetCalories(targetCalories)
                 .progressPercent(progressPercent)
                 .statusColor(statusColor)
@@ -367,6 +453,9 @@ public class DailyLogServiceImpl implements DailyLogService {
                 .date(date)
                 .label(formatChartLabel(date))
                 .totalCalories(totalCalories)
+                .totalProtein(0.0)
+                .totalCarbs(0.0)
+                .totalFat(0.0)
                 .targetCalories(targetCalories)
                 .progressPercent(0.0)
                 .statusColor(StatusColor.BLUE)
@@ -406,4 +495,265 @@ public class DailyLogServiceImpl implements DailyLogService {
             throw new ApiException(ErrorCode.VALIDATION_ERROR, "Month must be between 1 and 12");
         }
     }
+
+    private ResolvedFoodInfo resolveFoodInfo(User user, AddManualFoodRequest request) {
+
+        boolean hasFoodId = isValidId(request.getFoodId());
+        boolean hasScanId = isValidId(request.getScanId());
+        boolean hasFoodName = isRealFoodName(request.getFoodName());
+
+        int sourceCount = 0;
+
+        if (hasFoodId) {
+            sourceCount++;
+        }
+
+        if (hasScanId) {
+            sourceCount++;
+        }
+
+        if (hasFoodName) {
+            sourceCount++;
+        }
+
+        if (sourceCount == 0) {
+            throw new IllegalArgumentException(
+                    "Vui lòng truyền foodId > 0 hoặc scanId > 0 hoặc foodName hợp lệ"
+            );
+        }
+
+        if (sourceCount > 1) {
+            throw new IllegalArgumentException(
+                    "Chỉ được truyền một trong ba: foodId, scanId hoặc foodName"
+            );
+        }
+
+        if (hasFoodId) {
+            return resolveFromFoodItem(request.getFoodId());
+        }
+
+        if (hasScanId) {
+            return resolveFromScanHistory(user, request.getScanId());
+        }
+
+        return resolveFromManualInput(request);
+    }
+
+    private ResolvedFoodInfo resolveFromFoodItem(Integer foodId) {
+
+        FoodItem foodItem = foodItemRepository.findByFoodIdAndDeletedFalse(foodId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn với foodId: " + foodId));
+
+        if (foodItem.getCalories() == null) {
+            throw new RuntimeException("Món ăn chưa có thông tin calories");
+        }
+
+        return ResolvedFoodInfo.builder()
+                .foodId(foodItem.getFoodId())
+                .scanId(null)
+                .foodName(foodItem.getFoodName())
+                .calories(foodItem.getCalories())
+                .fat(foodItem.getFat())
+                .carbs(foodItem.getCarbs())
+                .protein(foodItem.getProtein())
+                .build();
+    }
+
+    private ResolvedFoodInfo resolveFromScanHistory(User user, Integer scanId) {
+
+        AIScanHistory scanHistory = aiScanHistoryRepository.findById(scanId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy lịch sử scan với scanId: " + scanId));
+
+        if (scanHistory.getUser() == null
+                || !scanHistory.getUser().getUserId().equals(user.getUserId())) {
+            throw new RuntimeException("Bạn không có quyền sử dụng scanId này");
+        }
+
+        if (scanHistory.getDetectedFood() == null
+                || scanHistory.getDetectedFood().trim().isEmpty()) {
+            throw new RuntimeException("Lịch sử scan chưa có tên món ăn");
+        }
+
+        if (scanHistory.getEstimatedCalories() == null) {
+            throw new RuntimeException("Lịch sử scan chưa có thông tin calories");
+        }
+
+        return ResolvedFoodInfo.builder()
+                .foodId(null)
+                .scanId(scanHistory.getScanId())
+                .foodName(scanHistory.getDetectedFood())
+                .calories(scanHistory.getEstimatedCalories())
+                .fat(scanHistory.getFat())
+                .carbs(scanHistory.getCarbs())
+                .protein(scanHistory.getProtein())
+                .build();
+    }
+
+    private boolean isValidId(Integer id) {
+        return id != null && id > 0;
+    }
+
+    private boolean isRealFoodName(String foodName) {
+        return foodName != null
+                && !foodName.trim().isEmpty()
+                && !"string".equalsIgnoreCase(foodName.trim());
+    }
+
+    private ResolvedFoodInfo resolveFromManualInput(AddManualFoodRequest request) {
+
+        validateManualNutrition(request);
+
+        return ResolvedFoodInfo.builder()
+                .foodId(null)
+                .scanId(null)
+                .foodName(request.getFoodName().trim())
+                .calories(request.getCalories())
+                .fat(request.getFat())
+                .carbs(request.getCarbs())
+                .protein(request.getProtein())
+                .build();
+    }
+
+    private void validateManualNutrition(AddManualFoodRequest request) {
+
+        if (!isRealFoodName(request.getFoodName())) {
+            throw new IllegalArgumentException("foodName không hợp lệ");
+        }
+
+        if (request.getCalories() == null || request.getCalories() <= 0) {
+            throw new IllegalArgumentException("calories is required and must be > 0");
+        }
+
+        if (request.getFat() == null || request.getFat() < 0) {
+            throw new IllegalArgumentException("fat is required and must be >= 0");
+        }
+
+        if (request.getCarbs() == null || request.getCarbs() < 0) {
+            throw new IllegalArgumentException("carbs is required and must be >= 0");
+        }
+
+        if (request.getProtein() == null || request.getProtein() < 0) {
+            throw new IllegalArgumentException("protein is required and must be >= 0");
+        }
+    }
+
+    private static class NutritionTotals {
+
+        private final Double calories;
+        private final Double protein;
+        private final Double carbs;
+        private final Double fat;
+
+        public NutritionTotals(
+                Double calories,
+                Double protein,
+                Double carbs,
+                Double fat
+        ) {
+            this.calories = calories;
+            this.protein = protein;
+            this.carbs = carbs;
+            this.fat = fat;
+        }
+    }
+
+    private NutritionTotals calculateNutritionTotals(DailyLog dailyLog) {
+
+        if (dailyLog.getLogDetails() == null || dailyLog.getLogDetails().isEmpty()) {
+            return new NutritionTotals(
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+            );
+        }
+
+        double totalCalories = dailyLog.getLogDetails()
+                .stream()
+                .mapToDouble(detail -> safeDouble(detail.getCalories()))
+                .sum();
+
+        double totalProtein = dailyLog.getLogDetails()
+                .stream()
+                .mapToDouble(detail -> safeDouble(detail.getProtein()))
+                .sum();
+
+        double totalCarbs = dailyLog.getLogDetails()
+                .stream()
+                .mapToDouble(detail -> safeDouble(detail.getCarbs()))
+                .sum();
+
+        double totalFat = dailyLog.getLogDetails()
+                .stream()
+                .mapToDouble(detail -> safeDouble(detail.getFat()))
+                .sum();
+
+        return new NutritionTotals(
+                roundOneDecimal(totalCalories),
+                roundOneDecimal(totalProtein),
+                roundOneDecimal(totalCarbs),
+                roundOneDecimal(totalFat)
+        );
+    }
+
+    private Double roundOneDecimal(Double value) {
+        if (value == null) {
+            return 0.0;
+        }
+
+        return Math.round(value * 10.0) / 10.0;
+    }
+
+    private String resolveFoodName(LogDetail detail) {
+
+        if (detail.getFoodNameSnapshot() != null
+                && !detail.getFoodNameSnapshot().trim().isEmpty()) {
+            return detail.getFoodNameSnapshot();
+        }
+
+        if (detail.getFoodItem() != null) {
+            return detail.getFoodItem().getFoodName();
+        }
+
+        return "Unknown food";
+    }
+
+    private MealHistoryResponse.MealItem mapToMealHistoryItem(LogDetail detail) {
+
+        Integer foodId = null;
+        Integer scanId = null;
+
+        if (detail.getFoodItem() != null) {
+            foodId = detail.getFoodItem().getFoodId();
+        }
+
+        if (detail.getScanHistory() != null) {
+            scanId = detail.getScanHistory().getScanId();
+        }
+
+        String foodName = detail.getFoodNameSnapshot();
+
+        if ((foodName == null || foodName.isBlank()) && detail.getFoodItem() != null) {
+            foodName = detail.getFoodItem().getFoodName();
+        }
+
+        if ((foodName == null || foodName.isBlank()) && detail.getScanHistory() != null) {
+            foodName = detail.getScanHistory().getDetectedFood();
+        }
+
+        return MealHistoryResponse.MealItem.builder()
+                .detailId(detail.getDetailId())
+                .foodId(foodId)
+                .scanId(scanId)
+                .foodName(foodName)
+                .quantity(detail.getQuantity())
+                .calories(detail.getCalories())
+                .fat(detail.getFat())
+                .carbs(detail.getCarbs())
+                .protein(detail.getProtein())
+                .mealTime(detail.getMealTime())
+                .source(detail.getSource() != null ? detail.getSource().name() : null)
+                .build();
+    }
+
 }
