@@ -61,7 +61,7 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
 
     @Override
     public MySubscriptionResponse getMySubscription(String username) {
-        User user = userRepository.findByUsername(username)
+        User user = userRepository.findByUsernameAndIsActiveTrue(username)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng"));
 
         UserSubscription userSubscription = userSubscriptionRepository

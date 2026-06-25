@@ -37,7 +37,7 @@ public class DailyLogServiceImpl implements DailyLogService {
     @Transactional
     public AddManualFoodResponse addManualFood(String username, AddManualFoodRequest request) {
 
-        User user = userRepository.findByUsername(username)
+        User user = userRepository.findByUsernameAndIsActiveTrue(username)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy user đang đăng nhập"));
 
         if (request.getQuantity() == null || request.getQuantity() <= 0) {
@@ -150,7 +150,7 @@ public class DailyLogServiceImpl implements DailyLogService {
     @Transactional(readOnly = true)
     public MealHistoryResponse getMealHistory(String username, LocalDate date) {
 
-        User user = userRepository.findByUsername(username)
+        User user = userRepository.findByUsernameAndIsActiveTrue(username)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy user đang đăng nhập"));
 
         LocalDate targetDate = date == null ? LocalDate.now() : date;

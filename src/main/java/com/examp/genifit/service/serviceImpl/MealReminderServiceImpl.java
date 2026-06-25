@@ -166,7 +166,7 @@ public class MealReminderServiceImpl implements MealReminderService {
 
         String username = authentication.getName();
 
-        return userRepository.findByUsername(username)
+        return userRepository.findByUsernameAndIsActiveTrue(username)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy user hiện tại"));
     }
 }
