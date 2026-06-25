@@ -1,5 +1,6 @@
 package com.examp.genifit.service;
 
 public interface EmailService {
-    void sendOtpEmail(String toEmail, String otpCode);
+    void sendRegistrationOtpEmail(String toEmail, String otpCode);
+    void sendForgotPasswordOtpEmail(String toEmail, String otpCode);
 }
