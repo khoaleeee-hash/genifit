@@ -220,4 +220,6 @@ public class UserServiceImpl implements UserService {
         userProfileRepository.save(profile);
         return userMapper.toUserProfileResponse(profile);
     }
+
+
 }
