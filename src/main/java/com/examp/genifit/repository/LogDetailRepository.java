@@ -10,4 +10,9 @@ public interface LogDetailRepository extends JpaRepository<LogDetail, Integer> {
             Integer foodId,
             MealTime mealTime
     );
+    boolean existsByDailyLog_LogIdAndFoodNameSnapshotIgnoreCaseAndMealTime(
+            Integer logId,
+            String foodNameSnapshot,
+            MealTime mealTime
+    );
 }

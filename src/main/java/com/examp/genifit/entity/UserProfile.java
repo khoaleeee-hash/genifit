@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "user_profiles")
@@ -44,6 +46,18 @@ public class UserProfile {
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
+
+    @ElementCollection
+    @CollectionTable(name = "user_medical_conditions",
+            joinColumns = @JoinColumn(name = "profile_id"))
+    @Column(name = "condition_name")
+    private List<String> medicalConditions = new ArrayList<>(); // bệnh nền
+
+    @ElementCollection
+    @CollectionTable(name = "user_allergies",
+            joinColumns = @JoinColumn(name = "profile_id"))
+    @Column(name = "allergy")
+    private List<String> allergies = new ArrayList<>(); // dị ứng
 
     @PrePersist
     public void onCreate() {
