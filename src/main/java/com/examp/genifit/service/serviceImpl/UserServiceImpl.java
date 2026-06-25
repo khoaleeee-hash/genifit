@@ -230,12 +230,9 @@ public class UserServiceImpl implements UserService {
 
         String username = authentication.getName();
 
-        return userRepository.findByUsername(username)
+        return userRepository.findByUsernameAndIsActiveTrue(username)
                 .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
     }
-
-    @Override
-    public void deleteUserById(Integer id) {}
 
     @Override
     @Transactional
