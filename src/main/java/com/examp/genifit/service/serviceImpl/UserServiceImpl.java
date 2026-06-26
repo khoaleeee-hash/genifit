@@ -18,8 +18,6 @@ import com.examp.genifit.repository.OtpTokenRepository;
 import com.examp.genifit.repository.UserProfileRepository;
 import com.examp.genifit.dto.response.UserSubscriptionResponse;
 import com.examp.genifit.entity.*;
-import com.examp.genifit.mapper.UserMapper;
-import com.examp.genifit.repository.OtpTokenRepository;
 import com.examp.genifit.repository.SubscriptionPlanRepository;
 import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.repository.UserSubscriptionRepository;

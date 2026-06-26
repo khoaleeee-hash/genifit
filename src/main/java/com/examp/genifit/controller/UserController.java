@@ -2,24 +2,22 @@ package com.examp.genifit.controller;
 
 import com.examp.genifit.common.response.ApiResponse;
 import com.examp.genifit.dto.request.*;
-import com.examp.genifit.dto.response.GeminiMealSuggestionResponse;
-import com.examp.genifit.dto.response.UserProfileResponse;
-import com.examp.genifit.dto.request.AssignSubscriptionRequest;
+import com.examp.genifit.dto.response.*;
 import com.examp.genifit.dto.request.CreateUserRequest;
 import com.examp.genifit.dto.request.GeminiMealSuggestionRequest;
 import com.examp.genifit.dto.response.GeminiMealSuggestionResponse;
-import com.examp.genifit.dto.response.MySubscriptionResponse;
-import com.examp.genifit.dto.response.UserResponse;
-import com.examp.genifit.dto.response.UserSubscriptionResponse;
+import com.examp.genifit.service.AuthenticationService;
 import com.examp.genifit.service.GeminiMealSuggestionService;
 import com.examp.genifit.service.SubscriptionPlanService;
 import com.examp.genifit.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -35,19 +33,20 @@ public class UserController {
     UserService userService;
     GeminiMealSuggestionService geminiMealSuggestionService;
     SubscriptionPlanService subscriptionPlanService;
+    AuthenticationService authenticationService;
 
     @PostMapping("/send-otp")
     public ApiResponse<String> sendOtp(@RequestParam String email) {
         userService.generateAndSendOtp(email);
         return ApiResponse.success(
-                "OTP send successfully! Check your mailbox!",
+                "OTP sent successfully! Check your mailbox!",
                 email);
     }
 
     @PostMapping("/register")
     public ApiResponse<UserResponse> createUser(@RequestBody @Valid CreateUserRequest request) {
         return ApiResponse.success(
-                "Register successfully",
+                "Registered successfully",
                 userService.createUser(request)
         );
     }
@@ -86,7 +85,7 @@ public class UserController {
 
 
     @Operation(
-            summary = "Gợi ý món ăn từ nguyên liệu"
+            summary = "Suggest meals from ingredients"
     )
     @PostMapping("/from-ingredients")
     public ApiResponse<GeminiMealSuggestionResponse> suggestMealsFromIngredients(
@@ -99,7 +98,7 @@ public class UserController {
     }
 
     @Operation(
-            summary = "Lấy gói đăng ký hiện tại của tôi"
+            summary = "Get my active subscription"
     )
     @GetMapping("/my-active")
     public ApiResponse<UserSubscriptionResponse> getMyActiveSubscription() {
@@ -110,7 +109,7 @@ public class UserController {
     }
 
     @Operation(
-            summary = "Lấy lịch sử gói đăng ký của tôi"
+            summary = "Get my subscription history"
     )
     @GetMapping("/my-history")
     public ApiResponse<List<UserSubscriptionResponse>> getMySubscriptionHistory() {
@@ -121,7 +120,7 @@ public class UserController {
     }
 
     @Operation(
-            summary = "Xem gói đăng ký của tôi"
+            summary = "View my subscription plan"
     )
     @GetMapping("/my-plan")
     public MySubscriptionResponse getMySubscription(Authentication authentication) {
@@ -131,7 +130,7 @@ public class UserController {
     }
 
     @Operation(
-            summary = "Huỷ gói đăng ký hiện tại"
+            summary = "Cancel current subscription"
     )
     @PatchMapping("/cancel-my-subscription")
     public ApiResponse<String> cancelMySubscription() {
@@ -139,7 +138,7 @@ public class UserController {
 
         return ApiResponse.success(
                 "Cancel subscription successfully",
-                "Huỷ gói đăng ký thành công"
+                "Subscription cancelled successfully"
         );
     }
 
@@ -147,7 +146,7 @@ public class UserController {
     public ApiResponse<String> sendOtpForForgotPassword(@RequestParam String email) {
         userService.generateAndSendOtpForForgotPassword(email);
         return ApiResponse.success(
-                "Mã OTP khôi phục mật khẩu đã được gửi vào email của bạn!",
+                "Password reset OTP has been sent to your email!",
                 email
         );
     }
@@ -156,7 +155,7 @@ public class UserController {
     public ApiResponse<String> changePassword(@RequestBody @Valid ChangePasswordRequest request) {
         userService.changePassword(request);
         return ApiResponse.success(
-                "Đổi mật khẩu thành công",
+                "Password changed successfully",
                 "Success"
         );
     }
@@ -165,7 +164,7 @@ public class UserController {
     public ApiResponse<String> resetPassword(@RequestBody @Valid ResetPasswordRequest request) {
         userService.resetPassword(request);
         return ApiResponse.success(
-                "Khôi phục mật khẩu thành công",
+                "Password reset successfully",
                 "Success"
         );
     }
@@ -174,7 +173,7 @@ public class UserController {
     public ApiResponse<String> deleteMyAccount() {
         userService.deleteMe();
         return ApiResponse.success(
-                "Tài khoản của bạn đã được xóa",
+                "Your account has been deleted",
                 "Success"
         );
     }
@@ -183,7 +182,7 @@ public class UserController {
     public ApiResponse<String> deleteUserByAdmin(@PathVariable Integer id) {
         userService.deleteUserById(id);
         return ApiResponse.success(
-                "Admin đã xóa tài khoản thành công",
+                "Admin deleted the account successfully",
                 "Success"
         );
     }
@@ -191,8 +190,18 @@ public class UserController {
     @PutMapping("/me/profile")
     public ApiResponse<UserProfileResponse> updateMyProfile(@RequestBody UpdateUserProfileRequest request) {
         return ApiResponse.success(
-                "Cập nhật hồ sơ sức khỏe thành công",
+                "Health profile updated successfully",
                 userService.updateMyProfile(request)
+        );
+    }
+
+    @PostMapping("/me/upgrade")
+    @PreAuthorize("hasRole('GUEST')")
+    @SecurityRequirement(name = "bearerAuth")
+    public ApiResponse<AuthenticationResponse> upgradeGuestToMember(@RequestBody @Valid CreateUserRequest request) {
+        return ApiResponse.success(
+                "Account upgraded successfully! Legacy data has been synchronized.",
+                authenticationService.upgradeGuestToMember(request)
         );
     }
 }
