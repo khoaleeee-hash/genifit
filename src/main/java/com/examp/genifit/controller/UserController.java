@@ -11,6 +11,7 @@ import com.examp.genifit.dto.response.GeminiMealSuggestionResponse;
 import com.examp.genifit.dto.response.MySubscriptionResponse;
 import com.examp.genifit.dto.response.UserResponse;
 import com.examp.genifit.dto.response.UserSubscriptionResponse;
+import com.examp.genifit.entity.UserSubscription;
 import com.examp.genifit.service.GeminiMealSuggestionService;
 import com.examp.genifit.service.SubscriptionPlanService;
 import com.examp.genifit.service.UserService;
@@ -23,6 +24,7 @@ import lombok.experimental.FieldDefaults;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.util.List;
 
 @RestController
@@ -96,6 +98,26 @@ public class UserController {
                 "Suggest meals successfully",
                 geminiMealSuggestionService.suggestMealsFromIngredients(request)
         );
+    }
+
+    @Operation
+            (summary = "User đăng kí gói")
+    @PostMapping("/subscribe")
+    public ApiResponse<UserSubscriptionResponse> subscribePlan(
+            @Valid @RequestBody SubscribePlanRequest request,
+            Authentication authentication
+    ) {
+        String username = authentication.getName();
+
+        UserSubscriptionResponse response =
+                subscriptionPlanService.subscribePlan(username, request);
+
+        return ApiResponse.<UserSubscriptionResponse>builder()
+                .success(true)
+                .message("Đăng kí gói thành công")
+                .data(response)
+                .timestamp(Instant.now())
+                .build();
     }
 
     @Operation(
