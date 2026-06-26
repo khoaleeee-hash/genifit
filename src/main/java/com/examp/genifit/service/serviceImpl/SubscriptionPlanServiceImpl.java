@@ -157,7 +157,8 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
                 .startDate(startDate)
                 .endDate(endDate)
                 .status(SubscriptionStatus.ACTIVE)
-                .autoRenew(Boolean.TRUE.equals(request.getAutoRenew()))
+//                .autoRenew(Boolean.TRUE.equals(request.getAutoRenew()))
+                .autoRenew(false)
                 .build();
 
         UserSubscription saved = userSubscriptionRepository.save(newSubscription);
