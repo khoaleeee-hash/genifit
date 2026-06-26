@@ -2,16 +2,15 @@ package com.examp.genifit.service.serviceImpl;
 
 import com.examp.genifit.common.exception.ApiException;
 import com.examp.genifit.common.exception.ErrorCode;
-import com.examp.genifit.dto.request.AuthenticationRequest;
-import com.examp.genifit.dto.request.IntrospectRequest;
-import com.examp.genifit.dto.request.LogoutRequest;
-import com.examp.genifit.dto.request.RefreshTokenRequest;
+import com.examp.genifit.dto.request.*;
 import com.examp.genifit.dto.response.AuthenticationResponse;
 import com.examp.genifit.dto.response.IntrospectResponse;
 import com.examp.genifit.entity.InvalidatedToken;
+import com.examp.genifit.entity.OtpToken;
 import com.examp.genifit.entity.User;
 import com.examp.genifit.entity.UserRole;
 import com.examp.genifit.repository.InvalidatedTokenRepository;
+import com.examp.genifit.repository.OtpTokenRepository;
 import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.service.AuthenticationService;
 import com.examp.genifit.service.GoogleAuthService;
@@ -28,11 +27,13 @@ import lombok.experimental.FieldDefaults;
 import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.text.ParseException;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.Optional;
@@ -47,6 +48,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     PasswordEncoder passwordEncoder;
     InvalidatedTokenRepository invalidatedTokenRepository;
     GoogleAuthService googleAuthService;
+    OtpTokenRepository otpTokenRepository;
 
     @NonFinal
     @Value("${jwt.signerKey}")
@@ -245,5 +247,73 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             log.error("Google authentication failed", e);
             throw new ApiException(ErrorCode.UNAUTHENTICATED);
         }
+    }
+
+    @Override
+    @Transactional
+    public AuthenticationResponse loginAsGuest(GuestLoginRequest request) {
+        String guestUsername = "guest_" + request.getDeviceId();
+
+        User guestUser = userRepository.findByUsernameAndIsActiveTrue(guestUsername)
+                .orElseGet(() -> {
+                    User newUser = new User();
+                    newUser.setUsername(guestUsername);
+                    newUser.setEmail(null);
+                    newUser.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
+                    newUser.setRole(UserRole.GUEST);
+                    newUser.setIsActive(true);
+                    return userRepository.save(newUser);
+                });
+
+        String accessToken = generateToken(guestUser);
+        String refreshToken = generateRefreshToken(guestUser);
+
+        return AuthenticationResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .authenticated(true)
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public AuthenticationResponse upgradeGuestToMember(CreateUserRequest request) {
+        var context = SecurityContextHolder.getContext();
+        String currentUsername = context.getAuthentication().getName();
+
+        User guestUser = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+
+        if (guestUser.getRole() != UserRole.GUEST) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR);
+        }
+
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new ApiException(ErrorCode.USER_EXISTED);
+        }
+
+        OtpToken validOtp = otpTokenRepository.findByEmailAndOtpCode(request.getEmail(), request.getOtpCode())
+                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_OTP));
+
+        if (validOtp.getExpiryTime().isBefore(LocalDateTime.now())) {
+            throw new ApiException(ErrorCode.OTP_EXPIRED);
+        }
+
+        guestUser.setUsername(request.getUsername());
+        guestUser.setEmail(request.getEmail());
+        guestUser.setPasswordHash(passwordEncoder.encode(request.getPasswordHash()));
+        guestUser.setRole(UserRole.MEMBER);
+
+        userRepository.save(guestUser);
+        otpTokenRepository.delete(validOtp);
+
+        String accessToken = generateToken(guestUser);
+        String refreshToken = generateRefreshToken(guestUser);
+
+        return AuthenticationResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .authenticated(true)
+                .build();
     }
 }
