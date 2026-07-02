@@ -23,6 +23,7 @@ import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.repository.UserSubscriptionRepository;
 import com.examp.genifit.service.EmailService;
 import com.examp.genifit.service.UserService;
+import com.examp.genifit.util.CalorieCalculatorUtil;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -106,7 +107,13 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
                 .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
 
-        return userMapper.toUserResponse(user);
+        UserResponse response = userMapper.toUserResponse(user);
+
+        userProfileRepository.findByUser(user).ifPresent(profile -> {
+            response.setUserProfile(userMapper.toUserProfileResponse(profile));
+        });
+
+        return response;
     }
 
     @Override
@@ -332,8 +339,20 @@ public class UserServiceImpl implements UserService {
         profile.setGender(request.getGender());
         profile.setGoal(request.getGoal());
         profile.setActivityLevel(request.getActivityLevel());
+        profile.setTargetWeightKg(request.getTargetWeightKg());
+
+        Double calculatedCalorie = CalorieCalculatorUtil.calculateTargetCalorie(
+                request.getWeightKg(),
+                request.getHeightCm(),
+                request.getAge(),
+                request.getGender(),
+                request.getActivityLevel(),
+                request.getGoal()
+        );
+        profile.setBaseTargetCalorie(calculatedCalorie);
 
         userProfileRepository.save(profile);
+
         return userMapper.toUserProfileResponse(profile);
     }
 

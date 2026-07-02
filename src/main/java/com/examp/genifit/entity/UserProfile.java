@@ -38,9 +38,14 @@ public class UserProfile {
     @Column(length = 50)
     private GoalType goal;
 
+    @Enumerated(EnumType.STRING)
     @Column(length = 50)
-    private String activityLevel;
+    private ActivityLevel activityLevel;
 
+    @Column
+    private Double targetWeightKg;
+
+    @Column
     private Double baseTargetCalorie;
 
     private LocalDateTime createdAt;
