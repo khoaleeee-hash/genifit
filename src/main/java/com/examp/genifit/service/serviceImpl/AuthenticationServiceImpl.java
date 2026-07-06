@@ -266,7 +266,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
         String accessToken = generateToken(newGuest);
         String refreshToken = generateRefreshToken(newGuest);
-
+        /*access token*/
         return AuthenticationResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
