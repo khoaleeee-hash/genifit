@@ -252,21 +252,20 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     @Override
     @Transactional
     public AuthenticationResponse loginAsGuest(GuestLoginRequest request) {
-        String guestUsername = "guest_" + request.getDeviceId();
+        if(userRepository.existsByUsername(request.getUsername())) {
+            throw new ApiException(ErrorCode.USER_EXISTED, "Tên này đã có người sử dụng, vui lòng chọn tên khác.");
+        }
 
-        User guestUser = userRepository.findByUsernameAndIsActiveTrue(guestUsername)
-                .orElseGet(() -> {
-                    User newUser = new User();
-                    newUser.setUsername(guestUsername);
-                    newUser.setEmail(null);
-                    newUser.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
-                    newUser.setRole(UserRole.GUEST);
-                    newUser.setIsActive(true);
-                    return userRepository.save(newUser);
-                });
+        User newGuest = new User();
+        newGuest.setUsername(request.getUsername());
+        newGuest.setEmail(null);
+        newGuest.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
+        newGuest.setRole(UserRole.GUEST);
+        newGuest.setIsActive(true);
+        userRepository.save(newGuest);
 
-        String accessToken = generateToken(guestUser);
-        String refreshToken = generateRefreshToken(guestUser);
+        String accessToken = generateToken(newGuest);
+        String refreshToken = generateRefreshToken(newGuest);
 
         return AuthenticationResponse.builder()
                 .accessToken(accessToken)
