@@ -20,7 +20,7 @@ public interface AuthenticationService {
     SignedJWT verifyToken(String token) throws JOSEException, ParseException;;
     AuthenticationResponse authenticateWithGoogle(String idTokenString);
     AuthenticationResponse loginAsGuest(GuestLoginRequest request);
-    AuthenticationResponse upgradeGuestToMember(CreateUserRequest request);
+    AuthenticationResponse upgradeGuestToMember(CreateUserFromGuestRequest request);
 //    AuthenticationResponse refreshToken(RefreshRequest request);
 
 }

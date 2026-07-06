@@ -22,7 +22,7 @@ public class GoogleAuthServiceImpl implements GoogleAuthService {
 
         GoogleIdToken idToken = verifier.verify(idTokenString);
         if (idToken != null) {
-            return idToken.getPayload(); // Token chuẩn, trả về thông tin user
+            return idToken.getPayload();
         } else {
             throw new IllegalArgumentException("Token is not valid or expired!");
         }

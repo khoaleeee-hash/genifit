@@ -7,4 +7,5 @@ import lombok.Data;
 public class GuestLoginRequest {
     @NotBlank(message = "Device ID is not null")
     private String deviceId;
+    private String username;
 }
