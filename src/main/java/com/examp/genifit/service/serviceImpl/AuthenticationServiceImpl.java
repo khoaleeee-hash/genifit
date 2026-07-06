@@ -276,7 +276,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
     @Override
     @Transactional
-    public AuthenticationResponse upgradeGuestToMember(CreateUserRequest request) {
+    public AuthenticationResponse upgradeGuestToMember(CreateUserFromGuestRequest request) {
         var context = SecurityContextHolder.getContext();
         String currentUsername = context.getAuthentication().getName();
 
@@ -284,11 +284,11 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
 
         if (guestUser.getRole() != UserRole.GUEST) {
-            throw new ApiException(ErrorCode.VALIDATION_ERROR);
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "Chỉ tài khoản Khách (Guest) mới có thể nâng cấp lên Thành viên.");
         }
 
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new ApiException(ErrorCode.USER_EXISTED);
+            throw new ApiException(ErrorCode.USER_EXISTED, "Email này đã được đăng ký trong hệ thống.");
         }
 
         OtpToken validOtp = otpTokenRepository.findByEmailAndOtpCode(request.getEmail(), request.getOtpCode())
@@ -298,7 +298,6 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             throw new ApiException(ErrorCode.OTP_EXPIRED);
         }
 
-        guestUser.setUsername(request.getUsername());
         guestUser.setEmail(request.getEmail());
         guestUser.setPasswordHash(passwordEncoder.encode(request.getPasswordHash()));
         guestUser.setRole(UserRole.MEMBER);

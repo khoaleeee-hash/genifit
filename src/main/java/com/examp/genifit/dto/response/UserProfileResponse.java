@@ -16,7 +16,6 @@ public class UserProfileResponse {
     String lastName;
     LocalDate dateOfBirth;
     String occupation;
-
     Double heightCm;
     Double weightKg;
     Integer age;

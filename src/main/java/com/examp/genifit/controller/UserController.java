@@ -221,9 +221,9 @@ public class UserController {
     }
 
     @PostMapping("/me/upgrade")
-    @PreAuthorize("hasRole('GUEST')")
+    @PreAuthorize("hasAuthority('GUEST')")
     @SecurityRequirement(name = "bearerAuth")
-    public ApiResponse<AuthenticationResponse> upgradeGuestToMember(@RequestBody @Valid CreateUserRequest request) {
+    public ApiResponse<AuthenticationResponse> upgradeGuestToMember(@RequestBody @Valid CreateUserFromGuestRequest request) {
         return ApiResponse.success(
                 "Account upgraded successfully! Legacy data has been synchronized.",
                 authenticationService.upgradeGuestToMember(request)

@@ -338,6 +338,10 @@ public class UserServiceImpl implements UserService {
         profile.setAge(request.getAge());
         profile.setGender(request.getGender());
         profile.setGoal(request.getGoal());
+        profile.setFirstName(request.getFirstName());
+        profile.setLastName(request.getLastName());
+        profile.setDateOfBirth(request.getDateOfBirth());
+        profile.setOccupation(request.getOccupation());
         profile.setActivityLevel(request.getActivityLevel());
         profile.setTargetWeightKg(request.getTargetWeightKg());
 
