@@ -125,17 +125,6 @@ public class AdvancedProfileServiceImpl implements AdvancedProfileService {
         return mapToResponse(advancedProfile, userProfile);
     }
 
-    @Override
-    public void deleteAdvancedProfile(Integer userId) {
-
-        AdvancedProfile advancedProfile = advancedProfileRepository
-                .findByUser_UserId(userId)
-                .orElseThrow(() ->
-                        new ApiException(ErrorCode.ADVANCED_PROFILE_NOT_FOUND));
-
-        advancedProfileRepository.delete(advancedProfile);
-    }
-
     private UserProfile getUserProfile(Integer userId) {
 
         UserProfile userProfile = userProfileRepository

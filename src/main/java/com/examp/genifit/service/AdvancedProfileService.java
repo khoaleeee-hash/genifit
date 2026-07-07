@@ -20,8 +20,4 @@ public interface AdvancedProfileService {
             Integer userId
     );
 
-    void deleteAdvancedProfile(
-            Integer userId
-    );
-
 }

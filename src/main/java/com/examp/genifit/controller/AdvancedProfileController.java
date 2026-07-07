@@ -92,23 +92,4 @@ public class AdvancedProfileController {
 
     }
 
-    @DeleteMapping
-    @Operation(summary = "Delete advanced profile")
-    public ResponseEntity<ApiResponse<Void>> deleteAdvancedProfile(
-            @AuthenticationPrincipal Jwt jwt
-    ) {
-
-        Integer userId = jwtUtils.getUserId(jwt);
-
-        advancedProfileService.deleteAdvancedProfile(userId);
-
-        return ResponseEntity.ok(
-                ApiResponse.success(
-                        "Delete advanced profile successfully",
-                        null
-                )
-        );
-
-    }
-
 }
