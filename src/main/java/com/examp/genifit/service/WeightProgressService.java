@@ -7,7 +7,7 @@ import org.springframework.data.domain.Page;
 
 public interface WeightProgressService {
 
-    WeightProgressResponse updateWeightProgress(UpdateWeightProgressRequest request);
+    WeightProgressResponse updateWeightProgress(Integer userId, UpdateWeightProgressRequest request);
 
     Page<WeightProgressHistoryResponse> getWeightProgressHistory(Integer userId, Integer pageNum, Integer pageSize);
 }

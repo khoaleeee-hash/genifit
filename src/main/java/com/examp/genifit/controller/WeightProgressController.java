@@ -30,13 +30,27 @@ public class WeightProgressController {
     private final JwtUtils jwtUtils;
 
     @PostMapping
-    @Operation(summary = "Update current weight and calculate progress")
-    public ResponseEntity<ApiResponse<WeightProgressResponse>> updateWeightProgress(
+    public ResponseEntity<ApiResponse<WeightProgressResponse>>
+    updateWeightProgress(
+            @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody UpdateWeightProgressRequest request
     ) {
-        WeightProgressResponse response = weightProgressService.updateWeightProgress(request);
 
-        return ResponseEntity.ok(ApiResponse.success("Update weight progress successfully", response));
+        Integer userId = jwtUtils.getUserId(jwt);
+
+        WeightProgressResponse response =
+                weightProgressService.updateWeightProgress(
+                        userId,
+                        request
+                );
+
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "Update weight progress successfully",
+                        response
+                )
+        );
+
     }
 
     @GetMapping("/history")
