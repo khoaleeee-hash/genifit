@@ -9,4 +9,6 @@ public interface AdvancedProfileRepository extends JpaRepository<AdvancedProfile
 
     Optional<AdvancedProfile> findByUser_UserId(Integer userId);
 
+    boolean existsByUser_UserId(Integer userId);
+
 }

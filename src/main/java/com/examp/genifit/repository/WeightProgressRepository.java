@@ -15,4 +15,5 @@ public interface WeightProgressRepository extends JpaRepository<WeightProgress, 
 
     Page<WeightProgress> findAllByUser_UserId(Integer userId, Pageable pageable);
 
+    Optional<WeightProgress> findTopByUser_UserIdOrderByRecordedDateDesc(Integer userId);
 }

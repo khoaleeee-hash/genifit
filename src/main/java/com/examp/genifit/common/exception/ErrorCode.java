@@ -34,6 +34,10 @@ public enum ErrorCode {
 
     ADVANCED_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "ADV_PROFILE_001", "Advanced profile not found"),
 
+    INVALID_USER_PROFILE(HttpStatus.NOT_FOUND, "ADV_PROFILE_002", "Advanced profile not found"),
+
+    ADVANCED_PROFILE_ALREADY_EXISTS(HttpStatus.BAD_REQUEST, "ADV_PROFILE_003", "Advanced profile already exists"),
+
     INVALID_WEIGHT_PROGRESS_CONFIG(HttpStatus.BAD_REQUEST, "WP_002", "Invalid weight progress configuration"),
 
     INVALID_WEIGHT_VALUE(HttpStatus.BAD_REQUEST, "WP_003", "Invalid weight value"),
@@ -52,7 +56,9 @@ public enum ErrorCode {
 
     SUBSCRIPTION_PLAN_INACTIVE(HttpStatus.BAD_REQUEST, "SUB_PLAN_003", "Subscription plan is inactive"),
 
-    INVALID_SUBSCRIPTION_REQUEST(HttpStatus.BAD_REQUEST, "SUB_003", "Invalid subscription request");
+    INVALID_SUBSCRIPTION_REQUEST(HttpStatus.BAD_REQUEST, "SUB_003", "Invalid subscription request"),
+
+    ;
 
     private final HttpStatus status;
     private final String code;
