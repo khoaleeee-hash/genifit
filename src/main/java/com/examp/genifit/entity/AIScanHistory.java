@@ -12,8 +12,8 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-
 public class AIScanHistory {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer scanId;
@@ -33,6 +33,17 @@ public class AIScanHistory {
     private String detectedFood;
 
     private Double estimatedCalories;
+
+    private Double protein;
+
+    private Double carbs;
+
+    private Double fat;
+
+    private Double quantity;
+
+    @Column(length = 50)
+    private String unit;
 
     @Column(columnDefinition = "TEXT")
     private String nutritionResult;

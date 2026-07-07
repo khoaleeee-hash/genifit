@@ -3,6 +3,7 @@ package com.examp.genifit.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +31,14 @@ public class UserProfile {
 
     private Integer age;
 
+    private String firstName;
+
+    private String lastName;
+
+    private LocalDate dateOfBirth;
+
+    private String occupation;
+
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
     private Gender gender;
@@ -38,9 +47,14 @@ public class UserProfile {
     @Column(length = 50)
     private GoalType goal;
 
+    @Enumerated(EnumType.STRING)
     @Column(length = 50)
-    private String activityLevel;
+    private ActivityLevel activityLevel;
 
+    @Column
+    private Double targetWeightKg;
+
+    @Column
     private Double baseTargetCalorie;
 
     private LocalDateTime createdAt;

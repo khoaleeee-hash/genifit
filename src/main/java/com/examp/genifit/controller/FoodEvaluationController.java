@@ -104,7 +104,7 @@ public class FoodEvaluationController {
 
         String username = authentication.getName();
 
-        return userRepository.findByUsername(username)
+        return userRepository.findByUsernameAndIsActiveTrue(username)
                 .map(User::getUserId)
                 .orElse(null);
     }

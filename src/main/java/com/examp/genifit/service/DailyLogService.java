@@ -7,7 +7,9 @@ import java.time.LocalDate;
 import java.util.List;
 
 public interface DailyLogService {
-    AddManualFoodResponse addManualFood(AddManualFoodRequest request);
+    AddManualFoodResponse addManualFood(String username, AddManualFoodRequest request);
+
+    MealHistoryResponse getMealHistory(String username, LocalDate date);
 
     DailyCaloriesResponse getTodayCalories(Integer userId);
 

@@ -2,16 +2,15 @@ package com.examp.genifit.service.serviceImpl;
 
 import com.examp.genifit.common.exception.ApiException;
 import com.examp.genifit.common.exception.ErrorCode;
-import com.examp.genifit.dto.request.AuthenticationRequest;
-import com.examp.genifit.dto.request.IntrospectRequest;
-import com.examp.genifit.dto.request.LogoutRequest;
-import com.examp.genifit.dto.request.RefreshTokenRequest;
+import com.examp.genifit.dto.request.*;
 import com.examp.genifit.dto.response.AuthenticationResponse;
 import com.examp.genifit.dto.response.IntrospectResponse;
 import com.examp.genifit.entity.InvalidatedToken;
+import com.examp.genifit.entity.OtpToken;
 import com.examp.genifit.entity.User;
 import com.examp.genifit.entity.UserRole;
 import com.examp.genifit.repository.InvalidatedTokenRepository;
+import com.examp.genifit.repository.OtpTokenRepository;
 import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.service.AuthenticationService;
 import com.examp.genifit.service.GoogleAuthService;
@@ -28,13 +27,16 @@ import lombok.experimental.FieldDefaults;
 import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.text.ParseException;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -46,6 +48,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     PasswordEncoder passwordEncoder;
     InvalidatedTokenRepository invalidatedTokenRepository;
     GoogleAuthService googleAuthService;
+    OtpTokenRepository otpTokenRepository;
 
     @NonFinal
     @Value("${jwt.signerKey}")
@@ -70,7 +73,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
 
     @Override
     public AuthenticationResponse authenticate(AuthenticationRequest request){
-        var user = userRepository.findByUsername(request.getUsername())
+        var user = userRepository.findByUsernameAndIsActiveTrue(request.getUsername())
                 .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
 
         boolean authenticated = passwordEncoder.matches(request.getPassword(),
@@ -152,7 +155,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         var signedJWT = verifyToken(request.getRefreshToken());
 
         var username = signedJWT.getJWTClaimsSet().getSubject();
-        var user = userRepository.findByUsername(username)
+        var user = userRepository.findByUsernameAndIsActiveTrue(username)
                 .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
 
         Date expirationTime = signedJWT.getJWTClaimsSet().getExpirationTime();
@@ -212,15 +215,22 @@ public class AuthenticationServiceImpl implements AuthenticationService {
         try {
             GoogleIdToken.Payload payload = googleAuthService.verifyToken(idTokenString);
             String email = payload.getEmail();
-
-            User user = userRepository.findByUsername(email).orElseGet(() -> {
-                User newUser = new User();
-                newUser.setUsername(email);
-                newUser.setEmail(email);
-                newUser.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
-                newUser.setRole(UserRole.MEMBER);
-                return userRepository.save(newUser);
-            });
+            Optional<User> existingUserOpt = userRepository.findByEmail(email);
+            User user;
+            if (existingUserOpt.isPresent()) {
+                user = existingUserOpt.get();
+                if (!user.getIsActive()) {
+                    throw new ApiException(ErrorCode.USER_BANNED);
+                }
+            } else {
+                user = new User();
+                user.setUsername(email.split("@")[0] + "_" + UUID.randomUUID().toString().substring(0, 5));
+                user.setEmail(email);
+                user.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
+                user.setRole(UserRole.MEMBER);
+                user.setIsActive(true);
+                user = userRepository.save(user);
+            }
 
             String accessToken = generateToken(user);
             String refreshToken = generateRefreshToken(user);
@@ -231,9 +241,77 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                     .authenticated(true)
                     .build();
 
+        } catch (ApiException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Google authentication failed", e);
             throw new ApiException(ErrorCode.UNAUTHENTICATED);
         }
+    }
+
+    @Override
+    @Transactional
+    public AuthenticationResponse loginAsGuest(GuestLoginRequest request) {
+        if(userRepository.existsByUsername(request.getUsername())) {
+            throw new ApiException(ErrorCode.USER_EXISTED, "Tên này đã có người sử dụng, vui lòng chọn tên khác.");
+        }
+
+        User newGuest = new User();
+        newGuest.setUsername(request.getUsername());
+        newGuest.setEmail(null);
+        newGuest.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
+        newGuest.setRole(UserRole.GUEST);
+        newGuest.setIsActive(true);
+        userRepository.save(newGuest);
+
+        String accessToken = generateToken(newGuest);
+        String refreshToken = generateRefreshToken(newGuest);
+        /*access token*/
+        return AuthenticationResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .authenticated(true)
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public AuthenticationResponse upgradeGuestToMember(CreateUserFromGuestRequest request) {
+        var context = SecurityContextHolder.getContext();
+        String currentUsername = context.getAuthentication().getName();
+
+        User guestUser = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+
+        if (guestUser.getRole() != UserRole.GUEST) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "Chỉ tài khoản Khách (Guest) mới có thể nâng cấp lên Thành viên.");
+        }
+
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new ApiException(ErrorCode.USER_EXISTED, "Email này đã được đăng ký trong hệ thống.");
+        }
+
+        OtpToken validOtp = otpTokenRepository.findByEmailAndOtpCode(request.getEmail(), request.getOtpCode())
+                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_OTP));
+
+        if (validOtp.getExpiryTime().isBefore(LocalDateTime.now())) {
+            throw new ApiException(ErrorCode.OTP_EXPIRED);
+        }
+
+        guestUser.setEmail(request.getEmail());
+        guestUser.setPasswordHash(passwordEncoder.encode(request.getPasswordHash()));
+        guestUser.setRole(UserRole.MEMBER);
+
+        userRepository.save(guestUser);
+        otpTokenRepository.delete(validOtp);
+
+        String accessToken = generateToken(guestUser);
+        String refreshToken = generateRefreshToken(guestUser);
+
+        return AuthenticationResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .authenticated(true)
+                .build();
     }
 }

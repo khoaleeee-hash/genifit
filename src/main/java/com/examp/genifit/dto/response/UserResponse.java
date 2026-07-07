@@ -1,5 +1,6 @@
 package com.examp.genifit.dto.response;
 
+import com.examp.genifit.entity.UserRole;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
@@ -12,4 +13,6 @@ public class UserResponse {
     Integer userId;
     String username;
     String email;
+    UserRole role;
+    UserProfileResponse userProfile;
 }

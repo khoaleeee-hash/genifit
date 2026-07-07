@@ -1,11 +1,9 @@
 package com.examp.genifit.service.serviceImpl;
 
 import com.examp.genifit.dto.request.CreateSubscriptionPlanRequest;
+import com.examp.genifit.dto.request.SubscribePlanRequest;
 import com.examp.genifit.dto.request.UpdateSubscriptionPlanRequest;
-import com.examp.genifit.dto.response.MySubscriptionResponse;
-import com.examp.genifit.dto.response.PageInfoResponse;
-import com.examp.genifit.dto.response.PageResponse;
-import com.examp.genifit.dto.response.SubscriptionPlanResponse;
+import com.examp.genifit.dto.response.*;
 import com.examp.genifit.entity.SubscriptionPlan;
 import com.examp.genifit.entity.SubscriptionStatus;
 import com.examp.genifit.entity.User;
@@ -14,6 +12,7 @@ import com.examp.genifit.repository.SubscriptionPlanRepository;
 import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.repository.UserSubscriptionRepository;
 import com.examp.genifit.service.SubscriptionPlanService;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -22,6 +21,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
@@ -61,7 +61,7 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
 
     @Override
     public MySubscriptionResponse getMySubscription(String username) {
-        User user = userRepository.findByUsername(username)
+        User user = userRepository.findByUsernameAndIsActiveTrue(username)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng"));
 
         UserSubscription userSubscription = userSubscriptionRepository
@@ -113,6 +113,57 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
         SubscriptionPlan savedPlan = subscriptionPlanRepository.save(plan);
 
         return new SubscriptionPlanResponse(savedPlan);
+    }
+
+    @Override
+    @Transactional
+    public UserSubscriptionResponse subscribePlan(
+            String username,
+            SubscribePlanRequest request
+    ) {
+        User user = userRepository.findByUsernameAndIsActiveTrue(username)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy user đang đăng nhập"));
+
+        SubscriptionPlan plan = subscriptionPlanRepository.findById(request.getPlanId())
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy gói đăng kí"));
+
+        if (Boolean.FALSE.equals(plan.getActive())) {
+            throw new RuntimeException("Gói đăng kí này hiện không còn hoạt động");
+        }
+
+        if (Boolean.TRUE.equals(plan.getDeleted())) {
+            throw new RuntimeException("Gói đăng kí này đã bị xoá");
+        }
+
+        if (plan.getDurationDays() == null || plan.getDurationDays() <= 0) {
+            throw new RuntimeException("Thời hạn gói đăng kí không hợp lệ");
+        }
+
+        userSubscriptionRepository
+                .findFirstByUserAndStatusOrderByEndDateDesc(user, SubscriptionStatus.ACTIVE)
+                .ifPresent(currentSubscription -> {
+                    currentSubscription.setStatus(SubscriptionStatus.CANCELLED);
+                    currentSubscription.setCancelledAt(LocalDateTime.now());
+                    currentSubscription.setAutoRenew(false);
+                    userSubscriptionRepository.save(currentSubscription);
+                });
+
+        LocalDateTime startDate = LocalDateTime.now();
+        LocalDateTime endDate = startDate.plusDays(plan.getDurationDays());
+
+        UserSubscription newSubscription = UserSubscription.builder()
+                .user(user)
+                .subscriptionPlan(plan)
+                .startDate(startDate)
+                .endDate(endDate)
+                .status(SubscriptionStatus.ACTIVE)
+//                .autoRenew(Boolean.TRUE.equals(request.getAutoRenew()))
+                .autoRenew(false)
+                .build();
+
+        UserSubscription saved = userSubscriptionRepository.save(newSubscription);
+
+        return new UserSubscriptionResponse(saved);
     }
 
     @Override

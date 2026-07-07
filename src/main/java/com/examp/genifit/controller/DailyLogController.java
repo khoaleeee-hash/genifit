@@ -7,12 +7,14 @@ import com.examp.genifit.dto.response.*;
 import com.examp.genifit.service.DailyLogService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
@@ -30,9 +32,28 @@ public class DailyLogController {
 
     @PostMapping("/meals/manual-foods")
     public AddManualFoodResponse addManualFood(
-            @RequestBody AddManualFoodRequest request
+            @Valid @RequestBody AddManualFoodRequest request,
+            Authentication authentication
     ) {
-        return dailyLogService.addManualFood(request);
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new RuntimeException("Bạn cần đăng nhập để thêm món ăn");
+        }
+
+        String username = authentication.getName();
+
+        return dailyLogService.addManualFood(username, request);
+    }
+
+    @GetMapping("/meals/history")
+    @Operation(summary = "Lấy lịch sử thức ăn theo ngày/hôm nay")
+    public MealHistoryResponse getMealHistory(
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate date,
+            Authentication authentication
+    ) {
+        String username = authentication.getName();
+        return dailyLogService.getMealHistory(username, date);
     }
 
     @GetMapping("/today")

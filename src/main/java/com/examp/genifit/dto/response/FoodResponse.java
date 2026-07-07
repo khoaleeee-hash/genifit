@@ -16,6 +16,7 @@ import lombok.Setter;
         "fat",
         "nutritionInfo",
         "isPublic",
+        "isDeleted",
         "approvalStatus",
         "createdByUserId"
 })
@@ -31,6 +32,7 @@ public class FoodResponse {
 
     private String nutritionInfo;
     private Boolean isPublic;
+    private Boolean isDeleted;
     private String approvalStatus;
     private Integer createdByUserId;
 
@@ -45,6 +47,7 @@ public class FoodResponse {
 
         this.nutritionInfo = foodItem.getNutritionInfo();
         this.isPublic = foodItem.getIsPublic();
+        this.isDeleted = foodItem.getDeleted();
 
         this.approvalStatus = foodItem.getApprovalStatus() == null
                 ? null

@@ -2,18 +2,28 @@ package com.examp.genifit.service.serviceImpl;
 
 import com.examp.genifit.common.exception.ApiException;
 import com.examp.genifit.common.exception.ErrorCode;
+import com.examp.genifit.dto.request.ChangePasswordRequest;
 import com.examp.genifit.dto.request.AssignSubscriptionRequest;
 import com.examp.genifit.dto.request.CreateUserRequest;
+import com.examp.genifit.dto.request.ResetPasswordRequest;
+import com.examp.genifit.dto.request.UpdateUserProfileRequest;
+import com.examp.genifit.dto.response.UserProfileResponse;
 import com.examp.genifit.dto.response.UserResponse;
-import com.examp.genifit.dto.response.UserSubscriptionResponse;
-import com.examp.genifit.entity.*;
+import com.examp.genifit.entity.OtpToken;
+import com.examp.genifit.entity.User;
+import com.examp.genifit.entity.UserProfile;
+import com.examp.genifit.entity.UserRole;
 import com.examp.genifit.mapper.UserMapper;
 import com.examp.genifit.repository.OtpTokenRepository;
+import com.examp.genifit.repository.UserProfileRepository;
+import com.examp.genifit.dto.response.UserSubscriptionResponse;
+import com.examp.genifit.entity.*;
 import com.examp.genifit.repository.SubscriptionPlanRepository;
 import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.repository.UserSubscriptionRepository;
 import com.examp.genifit.service.EmailService;
 import com.examp.genifit.service.UserService;
+import com.examp.genifit.util.CalorieCalculatorUtil;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -42,16 +52,16 @@ public class UserServiceImpl implements UserService {
     UserMapper userMapper;
     PasswordEncoder passwordEncoder;
     EmailService emailService;
+    UserProfileRepository userProfileRepository;
 
     @Override
     @Transactional
     public void generateAndSendOtp(String email) {
-        if (userRepository.existsByUsername(email)) {
+        if (userRepository.existsByEmail(email)) {
             throw new ApiException(ErrorCode.USER_EXISTED);
         }
 
         otpTokenRepository.deleteByEmail(email);
-
         String otp = String.format("%06d", new Random().nextInt(999999));
 
         OtpToken otpToken = OtpToken.builder()
@@ -61,7 +71,7 @@ public class UserServiceImpl implements UserService {
                 .build();
         otpTokenRepository.save(otpToken);
 
-        emailService.sendOtpEmail(email, otp);
+        emailService.sendRegistrationOtpEmail(email, otp);
     }
 
     @Override
@@ -81,6 +91,7 @@ public class UserServiceImpl implements UserService {
         User user = userMapper.toUser(request);
         user.setPasswordHash(passwordEncoder.encode(request.getPasswordHash()));
         user.setRole(UserRole.MEMBER);
+        user.setIsActive(true);
         userRepository.save(user);
 
         otpTokenRepository.delete(validOtp);
@@ -89,6 +100,38 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    public UserResponse getMyInfo() {
+        var context = SecurityContextHolder.getContext();
+        String currentUsername = context.getAuthentication().getName();
+
+        User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+
+        UserResponse response = userMapper.toUserResponse(user);
+
+        userProfileRepository.findByUser(user).ifPresent(profile -> {
+            response.setUserProfile(userMapper.toUserProfileResponse(profile));
+        });
+
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public void changePassword(ChangePasswordRequest request) {
+        var context = SecurityContextHolder.getContext();
+        String currentUsername = context.getAuthentication().getName();
+
+        User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+
+        if (!passwordEncoder.matches(request.getOldPassword(), user.getPasswordHash())) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR);
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+    }
     public UserSubscriptionResponse assignSubscription(AssignSubscriptionRequest request) {
         if (request == null || request.getUserId() == null || request.getPlanId() == null) {
             throw new ApiException(ErrorCode.INVALID_SUBSCRIPTION_REQUEST);
@@ -192,16 +235,130 @@ public class UserServiceImpl implements UserService {
 
         String username = authentication.getName();
 
-        return userRepository.findByUsername(username)
+        return userRepository.findByUsernameAndIsActiveTrue(username)
                 .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
     }
 
     @Override
-    public void deleteUserById(Integer id) {}
+    @Transactional
+    public void deleteMe() {
+        var context = SecurityContextHolder.getContext();
+        String currentUsername = context.getAuthentication().getName();
+
+        User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+
+        user.setIsActive(false);
+        userRepository.save(user);
+    }
 
     @Override
-    public UserResponse getUser(Integer id) { return null; }
+    @Transactional
+    public void generateAndSendOtpForForgotPassword(String email) {
+        if (!userRepository.existsByEmailAndIsActiveTrue(email)) {
+            throw new ApiException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        otpTokenRepository.deleteByEmail(email);
+        String otp = String.format("%06d", new Random().nextInt(999999));
+
+        OtpToken otpToken = OtpToken.builder()
+                .email(email)
+                .otpCode(otp)
+                .expiryTime(LocalDateTime.now().plusMinutes(5))
+                .build();
+        otpTokenRepository.save(otpToken);
+
+        emailService.sendForgotPasswordOtpEmail(email, otp);
+    }
 
     @Override
-    public List<UserResponse> getUsers() { return List.of(); }
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        User user = userRepository.findByEmailAndIsActiveTrue(request.getEmail())
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+
+        OtpToken validOtp = otpTokenRepository.findByEmailAndOtpCode(request.getEmail(), request.getOtpCode())
+                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_OTP));
+
+        if (validOtp.getExpiryTime().isBefore(LocalDateTime.now())) {
+            throw new ApiException(ErrorCode.OTP_EXPIRED);
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+        otpTokenRepository.delete(validOtp);
+    }
+
+    @Override
+    public List<UserResponse> searchUsers(String keyword) {
+        List<User> users = userRepository.findByUsernameContainingIgnoreCase(keyword);
+        return users.stream().map(userMapper::toUserResponse).toList();
+    }
+
+    @Override
+    public UserResponse getUser(Integer id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+
+        return userMapper.toUserResponse(user);
+    }
+
+    @Override
+    public List<UserResponse> getUsers() {
+        return userRepository.findAll().stream()
+                .map(userMapper::toUserResponse).toList();
+    }
+
+    @Override
+    @Transactional
+    public void deleteUserById(Integer id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+
+        user.setIsActive(false);
+        userRepository.save(user);
+    }
+
+    @Override
+    @Transactional
+    public UserProfileResponse updateMyProfile(UpdateUserProfileRequest request) {
+        var context = SecurityContextHolder.getContext();
+        String currentUsername = context.getAuthentication().getName();
+
+        User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+
+        UserProfile profile = userProfileRepository.findByUser(user)
+                .orElse(new UserProfile());
+
+        profile.setUser(user);
+        profile.setHeightCm(request.getHeightCm());
+        profile.setWeightKg(request.getWeightKg());
+        profile.setAge(request.getAge());
+        profile.setGender(request.getGender());
+        profile.setGoal(request.getGoal());
+        profile.setFirstName(request.getFirstName());
+        profile.setLastName(request.getLastName());
+        profile.setDateOfBirth(request.getDateOfBirth());
+        profile.setOccupation(request.getOccupation());
+        profile.setActivityLevel(request.getActivityLevel());
+        profile.setTargetWeightKg(request.getTargetWeightKg());
+
+        Double calculatedCalorie = CalorieCalculatorUtil.calculateTargetCalorie(
+                request.getWeightKg(),
+                request.getHeightCm(),
+                request.getAge(),
+                request.getGender(),
+                request.getActivityLevel(),
+                request.getGoal()
+        );
+        profile.setBaseTargetCalorie(calculatedCalorie);
+
+        userProfileRepository.save(profile);
+
+        return userMapper.toUserProfileResponse(profile);
+    }
+
+
 }
