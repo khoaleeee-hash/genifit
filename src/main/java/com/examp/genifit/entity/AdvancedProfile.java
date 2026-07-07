@@ -23,11 +23,7 @@ public class AdvancedProfile {
     @JoinColumn(name = "user_id", unique = true, nullable = false)
     private User user;
 
-    @Column(columnDefinition = "TEXT")
-    private String medicalConditions;
-
-    @Column(columnDefinition = "TEXT")
-    private String allergies;
+    private Double initialWeight;
 
     private Double targetWeight;
 

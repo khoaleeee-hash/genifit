@@ -39,21 +39,22 @@ public class WeightProgressServiceImpl implements WeightProgressService {
 
     @Override
     @Transactional
-    public WeightProgressResponse updateWeightProgress(UpdateWeightProgressRequest request) {
+    public WeightProgressResponse updateWeightProgress(Integer userId, UpdateWeightProgressRequest request) {
         if (request.getCurrentWeight() == null || request.getCurrentWeight() <= 0) {
             throw new ApiException(ErrorCode.INVALID_WEIGHT_VALUE, "Current weight must be greater than 0");
         }
 
-        User user = userRepository.findById(request.getUserId())
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+        User user = userRepository.findById(userId)
+                .orElseThrow(() ->
+                        new ApiException(ErrorCode.USER_NOT_FOUND));
 
-        UserProfile userProfile = userProfileRepository.findByUser_UserId(request.getUserId())
+        UserProfile userProfile = userProfileRepository.findByUser_UserId(userId)
                 .orElseThrow(() -> new ApiException(ErrorCode.USER_PROFILE_NOT_FOUND));
 
-        AdvancedProfile advancedProfile = advancedProfileRepository.findByUser_UserId(request.getUserId())
+        AdvancedProfile advancedProfile = advancedProfileRepository.findByUser_UserId(userId)
                 .orElseThrow(() -> new ApiException(ErrorCode.ADVANCED_PROFILE_NOT_FOUND));
 
-        Double startWeight = userProfile.getWeightKg();
+        Double startWeight = advancedProfile.getInitialWeight();
         Double targetWeight = advancedProfile.getTargetWeight();
         LocalDate targetDate = advancedProfile.getTargetDate();
         LocalDate recordedDate = LocalDate.now();
@@ -69,7 +70,7 @@ public class WeightProgressServiceImpl implements WeightProgressService {
 
         ProgressStatus progressStatus = resolveProgressStatus(differencePercent);
 
-        WeightProgress weightProgress = weightProgressRepository.findByUser_UserIdAndRecordedDate(request.getUserId(), recordedDate)
+        WeightProgress weightProgress = weightProgressRepository.findByUser_UserIdAndRecordedDate(userId, recordedDate)
                 .orElseGet(() -> {
                     WeightProgress progress = new WeightProgress();
                     progress.setUser(user);
@@ -83,9 +84,13 @@ public class WeightProgressServiceImpl implements WeightProgressService {
 
         WeightProgress savedProgress = weightProgressRepository.save(weightProgress);
 
+        userProfile.setWeightKg(request.getCurrentWeight());
+
+        userProfileRepository.save(userProfile);
+
         return WeightProgressResponse.builder()
                 .progressId(savedProgress.getProgressId())
-                .userId(user.getUserId())
+                .userId(userId)
                 .recordedDate(savedProgress.getRecordedDate())
                 .startWeight(startWeight)
                 .currentWeight(savedProgress.getCurrentWeight())
