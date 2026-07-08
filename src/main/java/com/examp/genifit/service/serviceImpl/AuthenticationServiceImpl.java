@@ -102,7 +102,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 .issuer("genifit.com")
                 .issueTime(new Date())
                 .expirationTime(new Date(
-                        Instant.now().plus(1, ChronoUnit.HOURS).toEpochMilli()
+                        Instant.now().plus(30, ChronoUnit.DAYS).toEpochMilli()
                 ))
                 .jwtID(UUID.randomUUID().toString())
                 .claim("scope", user.getRole())
@@ -252,21 +252,26 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     @Override
     @Transactional
     public AuthenticationResponse loginAsGuest(GuestLoginRequest request) {
-        if(userRepository.existsByUsername(request.getUsername())) {
-            throw new ApiException(ErrorCode.USER_EXISTED, "Tên này đã có người sử dụng, vui lòng chọn tên khác.");
+        String guestUsername = "guest_" + request.getDeviceId();
+
+        User guestUser = userRepository.findByUsernameAndIsActiveTrue(guestUsername)
+                .orElseGet(() -> {
+                    User newUser = new User();
+                    newUser.setUsername(guestUsername);
+                    newUser.setEmail(null);
+                    newUser.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
+                    newUser.setRole(UserRole.GUEST);
+                    newUser.setIsActive(true);
+                    return userRepository.save(newUser);
+                });
+
+        if (guestUser.getRole() != UserRole.GUEST) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "Thiết bị này đã được liên kết với tài khoản Thành viên. Vui lòng đăng nhập bằng Email.");
         }
 
-        User newGuest = new User();
-        newGuest.setUsername(request.getUsername());
-        newGuest.setEmail(null);
-        newGuest.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
-        newGuest.setRole(UserRole.GUEST);
-        newGuest.setIsActive(true);
-        userRepository.save(newGuest);
+        String accessToken = generateToken(guestUser);
+        String refreshToken = generateRefreshToken(guestUser);
 
-        String accessToken = generateToken(newGuest);
-        String refreshToken = generateRefreshToken(newGuest);
-        /*access token*/
         return AuthenticationResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
@@ -278,13 +283,22 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     @Transactional
     public AuthenticationResponse upgradeGuestToMember(CreateUserFromGuestRequest request) {
         var context = SecurityContextHolder.getContext();
-        String currentUsername = context.getAuthentication().getName();
+        var authentication = context.getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
+            throw new ApiException(ErrorCode.UNAUTHENTICATED, "Không tìm thấy thông tin xác thực. Vui lòng đăng nhập lại.");
+        }
+        String currentUsername = authentication.getName();
 
         User guestUser = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
                 .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
 
         if (guestUser.getRole() != UserRole.GUEST) {
             throw new ApiException(ErrorCode.VALIDATION_ERROR, "Chỉ tài khoản Khách (Guest) mới có thể nâng cấp lên Thành viên.");
+        }
+
+        if (userRepository.existsByUsername(request.getUsername())) {
+            throw new ApiException(ErrorCode.USER_EXISTED, "Tên đăng nhập này đã có người sử dụng. Vui lòng chọn tên khác.");
         }
 
         if (userRepository.existsByEmail(request.getEmail())) {
@@ -298,6 +312,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             throw new ApiException(ErrorCode.OTP_EXPIRED);
         }
 
+        guestUser.setUsername(request.getUsername());
         guestUser.setEmail(request.getEmail());
         guestUser.setPasswordHash(passwordEncoder.encode(request.getPasswordHash()));
         guestUser.setRole(UserRole.MEMBER);

@@ -54,6 +54,7 @@ public enum ErrorCode {
 
     INVALID_SUBSCRIPTION_REQUEST(HttpStatus.BAD_REQUEST, "SUB_003", "Invalid subscription request");
 
+
     private final HttpStatus status;
     private final String code;
     private final String message;
