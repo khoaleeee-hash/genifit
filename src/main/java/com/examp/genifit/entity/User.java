@@ -44,9 +44,6 @@ public class User {
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL)
     private UserProfile userProfile;
 
-    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL)
-    private AdvancedProfile advancedProfile;
-
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
     private List<DailyLog> dailyLogs = new ArrayList<>();
 

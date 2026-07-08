@@ -10,6 +10,7 @@ import lombok.Data;
 import lombok.experimental.FieldDefaults;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @FieldDefaults(level = AccessLevel.PRIVATE)
@@ -42,4 +43,10 @@ public class UpdateUserProfileRequest {
     ActivityLevel activityLevel;
 
     Double targetWeightKg;
+
+    LocalDate targetDate;
+
+    List<String> medicalConditions;
+
+    List<String> allergies;
 }

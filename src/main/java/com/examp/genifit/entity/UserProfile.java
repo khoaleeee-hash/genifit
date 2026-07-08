@@ -57,6 +57,15 @@ public class UserProfile {
     @Column
     private Double baseTargetCalorie;
 
+    @Column
+    private Double initialWeight;
+
+    @Column
+    private LocalDate targetDate;
+
+    @Column
+    private LocalDate goalStartDate;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

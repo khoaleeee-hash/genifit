@@ -5,12 +5,10 @@ import com.examp.genifit.common.exception.ErrorCode;
 import com.examp.genifit.dto.request.UpdateWeightProgressRequest;
 import com.examp.genifit.dto.response.WeightProgressHistoryResponse;
 import com.examp.genifit.dto.response.WeightProgressResponse;
-import com.examp.genifit.entity.AdvancedProfile;
 import com.examp.genifit.entity.ProgressStatus;
 import com.examp.genifit.entity.User;
 import com.examp.genifit.entity.UserProfile;
 import com.examp.genifit.entity.WeightProgress;
-import com.examp.genifit.repository.AdvancedProfileRepository;
 import com.examp.genifit.repository.UserProfileRepository;
 import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.repository.WeightProgressRepository;
@@ -34,7 +32,6 @@ public class WeightProgressServiceImpl implements WeightProgressService {
 
     private final UserRepository userRepository;
     private final UserProfileRepository userProfileRepository;
-    private final AdvancedProfileRepository advancedProfileRepository;
     private final WeightProgressRepository weightProgressRepository;
 
     @Override
@@ -45,24 +42,24 @@ public class WeightProgressServiceImpl implements WeightProgressService {
         }
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() ->
-                        new ApiException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
 
         UserProfile userProfile = userProfileRepository.findByUser_UserId(userId)
                 .orElseThrow(() -> new ApiException(ErrorCode.USER_PROFILE_NOT_FOUND));
 
-        AdvancedProfile advancedProfile = advancedProfileRepository.findByUser_UserId(userId)
-                .orElseThrow(() -> new ApiException(ErrorCode.ADVANCED_PROFILE_NOT_FOUND));
-
-        Double startWeight = advancedProfile.getInitialWeight();
-        Double targetWeight = advancedProfile.getTargetWeight();
-        LocalDate targetDate = advancedProfile.getTargetDate();
+        Double startWeight = userProfile.getInitialWeight();
+        Double targetWeight = userProfile.getTargetWeightKg();
+        LocalDate targetDate = userProfile.getTargetDate();
+        LocalDate startDate = userProfile.getGoalStartDate();
         LocalDate recordedDate = LocalDate.now();
+
+        if (startWeight == null || targetWeight == null || targetDate == null || startDate == null) {
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "Vui lòng thiết lập hồ sơ mục tiêu giảm cân trước khi cập nhật tiến độ.");
+        }
 
         validateProgressConfig(startWeight, targetWeight, targetDate, recordedDate);
 
-        double expectedProgressPercent = calculateExpectedProgressPercent(advancedProfile.getCreatedAt().toLocalDate(),
-                targetDate, recordedDate);
+        double expectedProgressPercent = calculateExpectedProgressPercent(startDate, targetDate, recordedDate);
 
         double actualProgressPercent = calculateActualProgressPercent(startWeight, targetWeight, request.getCurrentWeight());
 
@@ -85,7 +82,6 @@ public class WeightProgressServiceImpl implements WeightProgressService {
         WeightProgress savedProgress = weightProgressRepository.save(weightProgress);
 
         userProfile.setWeightKg(request.getCurrentWeight());
-
         userProfileRepository.save(userProfile);
 
         return WeightProgressResponse.builder()
@@ -144,7 +140,6 @@ public class WeightProgressServiceImpl implements WeightProgressService {
 
     private double calculateExpectedProgressPercent(LocalDate startDate, LocalDate targetDate, LocalDate currentDate) {
         long totalDays = ChronoUnit.DAYS.between(startDate, targetDate);
-
         long passedDays = ChronoUnit.DAYS.between(startDate, currentDate);
 
         if (totalDays <= 0) {
@@ -174,10 +169,8 @@ public class WeightProgressServiceImpl implements WeightProgressService {
         double actualChange;
 
         if (targetWeight < startWeight) {
-            // Lose weight
             actualChange = startWeight - currentWeight;
         } else {
-            // Gain weight
             actualChange = currentWeight - startWeight;
         }
 
