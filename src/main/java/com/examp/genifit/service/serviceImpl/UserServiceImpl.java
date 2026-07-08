@@ -34,6 +34,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Random;
@@ -132,6 +133,8 @@ public class UserServiceImpl implements UserService {
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
     }
+
+    @Transactional
     public UserSubscriptionResponse assignSubscription(AssignSubscriptionRequest request) {
         if (request == null || request.getUserId() == null || request.getPlanId() == null) {
             throw new ApiException(ErrorCode.INVALID_SUBSCRIPTION_REQUEST);
@@ -333,6 +336,19 @@ public class UserServiceImpl implements UserService {
                 .orElse(new UserProfile());
 
         profile.setUser(user);
+
+
+        boolean isFirstTimeSettingGoal = profile.getTargetDate() == null;
+
+        boolean goalChanged = isFirstTimeSettingGoal ||
+                (request.getTargetWeightKg() != null && !request.getTargetWeightKg().equals(profile.getTargetWeightKg())) ||
+                (request.getTargetDate() != null && !request.getTargetDate().equals(profile.getTargetDate()));
+
+        if (goalChanged && request.getTargetWeightKg() != null && request.getTargetDate() != null) {
+            profile.setInitialWeight(request.getWeightKg());
+            profile.setGoalStartDate(LocalDate.now());
+        }
+
         profile.setHeightCm(request.getHeightCm());
         profile.setWeightKg(request.getWeightKg());
         profile.setAge(request.getAge());
@@ -343,7 +359,11 @@ public class UserServiceImpl implements UserService {
         profile.setDateOfBirth(request.getDateOfBirth());
         profile.setOccupation(request.getOccupation());
         profile.setActivityLevel(request.getActivityLevel());
+
         profile.setTargetWeightKg(request.getTargetWeightKg());
+        profile.setTargetDate(request.getTargetDate());
+        profile.setMedicalConditions(request.getMedicalConditions());
+        profile.setAllergies(request.getAllergies());
 
         Double calculatedCalorie = CalorieCalculatorUtil.calculateTargetCalorie(
                 request.getWeightKg(),
@@ -359,6 +379,4 @@ public class UserServiceImpl implements UserService {
 
         return userMapper.toUserProfileResponse(profile);
     }
-
-
 }

@@ -6,6 +6,7 @@ import com.examp.genifit.entity.GoalType;
 import lombok.AccessLevel;
 import lombok.Data;
 import lombok.experimental.FieldDefaults;
+import java.util.List;
 
 import java.time.LocalDate;
 
@@ -24,4 +25,9 @@ public class UserProfileResponse {
     ActivityLevel activityLevel;
     Double targetWeightKg;
     Double baseTargetCalorie;
+    Double initialWeight;
+    LocalDate goalStartDate;
+    LocalDate targetDate;
+    List<String> medicalConditions;
+    List<String> allergies;
 }
