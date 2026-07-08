@@ -213,6 +213,7 @@ public class UserController {
     }
 
     @PutMapping("/me/profile")
+    @SecurityRequirement(name = "bearerAuth")
     public ApiResponse<UserProfileResponse> updateMyProfile(@RequestBody UpdateUserProfileRequest request) {
         return ApiResponse.success(
                 "Health profile updated successfully",
