@@ -4,6 +4,7 @@ import com.examp.genifit.entity.PlanType;
 import com.examp.genifit.entity.SubscriptionStatus;
 import com.examp.genifit.entity.UserSubscription;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 

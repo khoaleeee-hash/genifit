@@ -17,24 +17,35 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 @Slf4j
 public class ApplicationInitConfig {
+
     PasswordEncoder passwordEncoder;
 
     @Bean
-    ApplicationRunner applicationRunner(UserRepository userRepository){
+    ApplicationRunner applicationRunner(UserRepository userRepository) {
         return args -> {
-            if (!userRepository.existsByUsername("admin")){
-                User user = User.builder()
-                        .username("admin")
-                        .email("admin@genifit.com")
-                        .passwordHash(passwordEncoder.encode("admin"))
-                        .role(UserRole.ADMIN)
-                        .isActive(true)
-                        .build();
-                userRepository.save(user);
-                log.warn("admin user has been created with default password: admin, please change it");
-            } else {
-                log.info("Admin user already exists. Skipping creation.");
+            String adminUsername = "admin";
+            String adminEmail = "admin@genifit.com";
+
+            boolean adminExists =
+                    userRepository.existsByUsername(adminUsername)
+                            || userRepository.existsByEmail(adminEmail);
+
+            if (adminExists) {
+                log.info("Default admin already exists. Skipping creation.");
+                return;
             }
+
+            User user = User.builder()
+                    .username(adminUsername)
+                    .email(adminEmail)
+                    .passwordHash(passwordEncoder.encode("admin"))
+                    .role(UserRole.ADMIN)
+                    .isActive(true)
+                    .build();
+
+            userRepository.save(user);
+
+            log.warn("Admin user has been created with default password: admin, please change it");
         };
     }
 }

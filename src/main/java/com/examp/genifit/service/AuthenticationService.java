@@ -1,9 +1,6 @@
 package com.examp.genifit.service;
 
-import com.examp.genifit.dto.request.AuthenticationRequest;
-import com.examp.genifit.dto.request.IntrospectRequest;
-import com.examp.genifit.dto.request.LogoutRequest;
-import com.examp.genifit.dto.request.RefreshTokenRequest;
+import com.examp.genifit.dto.request.*;
 import com.examp.genifit.dto.response.AuthenticationResponse;
 import com.examp.genifit.dto.response.IntrospectResponse;
 import com.examp.genifit.entity.User;
@@ -22,6 +19,8 @@ public interface AuthenticationService {
     void invalidateToken(String token) throws ParseException, JOSEException;
     SignedJWT verifyToken(String token) throws JOSEException, ParseException;;
     AuthenticationResponse authenticateWithGoogle(String idTokenString);
+    AuthenticationResponse loginAsGuest(GuestLoginRequest request);
+    AuthenticationResponse upgradeGuestToMember(CreateUserFromGuestRequest request);
 //    AuthenticationResponse refreshToken(RefreshRequest request);
 
 }

@@ -10,14 +10,11 @@ import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
 import java.text.ParseException;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -63,5 +60,13 @@ public class AuthenticationController {
     public ApiResponse<AuthenticationResponse> loginWithGoogle(@RequestBody @Valid GoogleLoginRequest request) {
         AuthenticationResponse response = authenticationService.authenticateWithGoogle(request.getIdToken());
         return ApiResponse.success("Logged in Successfully!", response);
+    }
+
+    @PostMapping("/guest-login")
+    public ApiResponse<AuthenticationResponse> loginAsGuest(@RequestBody @Valid GuestLoginRequest request) {
+        return ApiResponse.success(
+                "Logged in Successfully!",
+                authenticationService.loginAsGuest(request)
+        );
     }
 }
