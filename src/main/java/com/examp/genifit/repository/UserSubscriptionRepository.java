@@ -22,4 +22,5 @@ public interface UserSubscriptionRepository extends JpaRepository<UserSubscripti
     Optional<UserSubscription> findByUser(User user);
     Page<UserSubscription> findByUserOrderByCreatedAtDesc(User user, Pageable pageable);
     boolean existsBySubscriptionPlanAndStatus(SubscriptionPlan subscriptionPlan, SubscriptionStatus status);
+    Optional<UserSubscription> findFirstByUserOrderByCreatedAtDesc(User user);
 }
