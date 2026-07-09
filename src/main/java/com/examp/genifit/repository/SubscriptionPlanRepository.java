@@ -21,7 +21,4 @@ public interface SubscriptionPlanRepository extends JpaRepository<SubscriptionPl
     Optional<SubscriptionPlan> findByPlanTypeAndDeletedFalse(PlanType planType);
     Optional<SubscriptionPlan> findByPlanIdAndDeletedFalse(Integer planId);
     boolean existsByPlanTypeAndDeletedFalse(PlanType planType);
-
-    List<SubscriptionPlan> findByStatus(SubscriptionStatus status);
-
 }

@@ -5,6 +5,7 @@ import com.examp.genifit.dto.response.PaymentHistoryResponse;
 import com.examp.genifit.dto.response.PaymentResponseDto;
 import com.examp.genifit.service.MoMoService;
 import com.examp.genifit.service.PaymentService;
+import com.examp.genifit.service.VNPayService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +18,7 @@ import java.util.Map;
 public class PaymentController {
     private final PaymentService paymentService;
     private final MoMoService moMoService;
+    private final VNPayService vnPayService;
 
     // User bấm mua → nhận payUrl
     @PostMapping("/init")
@@ -56,5 +58,24 @@ public class PaymentController {
         } else {
             return ResponseEntity.ok("Thanh toán thất bại hoặc bị huỷ.");
         }
+    }
+
+    // VNPay IPN — nhận query params (khác MoMo nhận JSON)
+    @GetMapping("/vnpay/ipn")
+    public ResponseEntity<Map<String, String>> vnpayIPN(
+            @RequestParam Map<String, String> params) {
+        vnPayService.handleIPN(params);
+        // VNPay yêu cầu trả về JSON này để xác nhận đã nhận IPN
+        return ResponseEntity.ok(Map.of(
+                "RspCode", "00",
+                "Message", "Confirm Success"
+        ));
+    }
+
+    @GetMapping("/vnpay/redirect")
+    public ResponseEntity<String> vnpayRedirect(@RequestParam Map<String, String> params) {
+        return "00".equals(params.get("vnp_ResponseCode"))
+                ? ResponseEntity.ok("Thanh toán VNPay thành công!")
+                : ResponseEntity.ok("Thanh toán VNPay thất bại hoặc bị huỷ.");
     }
 }

@@ -10,6 +10,7 @@ import com.examp.genifit.repository.SubscriptionPlanRepository;
 import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.service.MoMoService;
 import com.examp.genifit.service.PaymentService;
+import com.examp.genifit.service.VNPayService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -25,6 +26,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final SubscriptionPlanRepository planRepository;
     private final PaymentTransactionRepository transactionRepository;
     private final MoMoService moMoService;
+    private final VNPayService vnPayService;
     private static final int DEFAULT_PAGE_SIZE = 10;
 
     @Override
@@ -54,6 +56,7 @@ public class PaymentServiceImpl implements PaymentService {
         // Gọi cổng thanh toán tương ứng
         String payUrl = switch (paymentMethod) {
             case "MOMO" -> moMoService.createPayment(user, plan, orderCode);
+            case "VNPAY"  -> vnPayService.createPayment(user, plan, orderCode);
             default -> throw new RuntimeException("Unsupported payment method: " + paymentMethod);
         };
 

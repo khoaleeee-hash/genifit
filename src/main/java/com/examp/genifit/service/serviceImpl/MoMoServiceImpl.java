@@ -61,9 +61,10 @@ public class MoMoServiceImpl implements MoMoService {
                 + "&partnerCode=" + partnerCode
                 + "&redirectUrl=" + redirectUrl
                 + "&requestId=" + requestId
-                + "&requestType=payWithATM";
+                + "&requestType=payWithMethod";
 
         String signature = hmacSHA256(rawSignature, secretKey);
+
 
         // 2. Build request body
         Map<String, Object> requestBody = new LinkedHashMap<>();
@@ -76,9 +77,18 @@ public class MoMoServiceImpl implements MoMoService {
         requestBody.put("redirectUrl", redirectUrl);
         requestBody.put("ipnUrl", ipnUrl);
         requestBody.put("extraData", "");
-        requestBody.put("requestType", "payWithATM");
+        requestBody.put("requestType", "payWithMethod");
         requestBody.put("signature", signature);
         requestBody.put("lang", "vi");
+
+        System.out.println("=== MOMO DEBUG ===");
+        System.out.println("partnerCode: " + partnerCode);
+        System.out.println("accessKey: " + accessKey);
+        System.out.println("secretKey: " + secretKey);
+        System.out.println("rawSignature: " + rawSignature);
+        System.out.println("signature: " + signature);
+        System.out.println("requestBody: " + requestBody);
+        System.out.println("==================");
 
         // 3. Gọi MoMo API
         Map response = webClientBuilder.build()
@@ -87,6 +97,11 @@ public class MoMoServiceImpl implements MoMoService {
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(requestBody)
                 .retrieve()
+                .onStatus(status -> status.is4xxClientError(), clientResponse ->
+                        clientResponse.bodyToMono(String.class)
+                                .doOnNext(body -> System.out.println("MoMo error response: " + body))
+                                .map(body -> new RuntimeException("MoMo 400: " + body))
+                )
                 .bodyToMono(Map.class)
                 .block();
 
