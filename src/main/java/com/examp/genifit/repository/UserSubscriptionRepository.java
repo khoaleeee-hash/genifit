@@ -16,4 +16,5 @@ public interface UserSubscriptionRepository extends JpaRepository<UserSubscripti
     List<UserSubscription> findByUserOrderByCreatedAtDesc(User user);
     Optional<UserSubscription> findByUserUserIdAndStatus(Integer userId, SubscriptionStatus status);
     boolean existsByUserAndStatus(User user, SubscriptionStatus status);
+    Optional<UserSubscription> findByUser(User user);
 }
