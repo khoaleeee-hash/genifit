@@ -1,5 +1,6 @@
 package com.examp.genifit.service.serviceImpl;
 
+import com.examp.genifit.dto.response.MoMoRefundResponse;
 import com.examp.genifit.entity.*;
 import com.examp.genifit.repository.PaymentTransactionRepository;
 import com.examp.genifit.repository.SubscriptionPlanRepository;
@@ -13,6 +14,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -27,6 +29,9 @@ public class MoMoServiceImpl implements MoMoService {
     private final PaymentTransactionRepository transactionRepository;
     private final UserSubscriptionRepository subscriptionRepository;
     private final SubscriptionPlanRepository planRepository;
+
+    @Value("${momo.refund-url}")
+    private String refundUrl;
 
     @Value("${momo.partner-code}")
     private String partnerCode;
@@ -176,6 +181,103 @@ public class MoMoServiceImpl implements MoMoService {
         }
 
         subscriptionRepository.save(subscription);
+    }
+
+    @Override
+    public MoMoRefundResponse refund(
+            String originalOrderId,
+            String originalTransId,
+            BigDecimal amount,
+            String reason
+    ) {
+        if (originalOrderId == null || originalOrderId.isBlank()) {
+            return MoMoRefundResponse.builder()
+                    .success(false)
+                    .pending(false)
+                    .message("Không tìm thấy orderId gốc để hoàn tiền")
+                    .build();
+        }
+
+        if (originalTransId == null || originalTransId.isBlank()) {
+            return MoMoRefundResponse.builder()
+                    .success(false)
+                    .pending(false)
+                    .message("Không tìm thấy transId MoMo gốc để hoàn tiền")
+                    .build();
+        }
+
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return MoMoRefundResponse.builder()
+                    .success(false)
+                    .pending(false)
+                    .message("Số tiền hoàn không hợp lệ")
+                    .build();
+        }
+
+        String requestId = UUID.randomUUID().toString();
+        String refundOrderId = "RF" + System.currentTimeMillis();
+        long refundAmount = amount.longValue();
+
+        String rawSignature = "accessKey=" + accessKey
+                + "&amount=" + refundAmount
+                + "&description=" + reason
+                + "&orderId=" + refundOrderId
+                + "&partnerCode=" + partnerCode
+                + "&requestId=" + requestId
+                + "&transId=" + originalTransId;
+
+        String signature = hmacSHA256(rawSignature, secretKey);
+
+        Map<String, Object> requestBody = new LinkedHashMap<>();
+        requestBody.put("partnerCode", partnerCode);
+        requestBody.put("orderId", refundOrderId);
+        requestBody.put("requestId", requestId);
+        requestBody.put("amount", refundAmount);
+        requestBody.put("transId", originalTransId);
+        requestBody.put("description", reason);
+        requestBody.put("signature", signature);
+        requestBody.put("lang", "vi");
+
+        Map response = webClientBuilder.build()
+                .post()
+                .uri(refundUrl)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+
+        if (response == null) {
+            return MoMoRefundResponse.builder()
+                    .success(false)
+                    .pending(false)
+                    .message("MoMo refund không có response")
+                    .build();
+        }
+
+        String resultCode = String.valueOf(response.get("resultCode"));
+        String message = String.valueOf(response.get("message"));
+        String refundTransId = response.get("transId") == null
+                ? null
+                : String.valueOf(response.get("transId"));
+
+        if ("0".equals(resultCode)) {
+            return MoMoRefundResponse.builder()
+                    .success(true)
+                    .pending(false)
+                    .refundTransactionId(refundTransId)
+                    .message(message)
+                    .rawResponse(response.toString())
+                    .build();
+        }
+
+        return MoMoRefundResponse.builder()
+                .success(false)
+                .pending(false)
+                .refundTransactionId(refundTransId)
+                .message(message)
+                .rawResponse(response.toString())
+                .build();
     }
 
     private boolean verifySignature(Map<String, String> ipnData) {

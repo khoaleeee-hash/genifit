@@ -22,7 +22,7 @@ public class UserSubscription {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer subscriptionId;
 
-    @OneToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
@@ -30,8 +30,7 @@ public class UserSubscription {
     @JoinColumn(name = "plan_id", nullable = false)
     private SubscriptionPlan subscriptionPlan;
 
-    // Transaction tạo ra subscription này (lần mua gần nhất)
-    @OneToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "transaction_id")
     private PaymentTransaction transaction;
 
@@ -58,7 +57,7 @@ public class UserSubscription {
     @Column(name = "refund_status")
     private RefundStatus refundStatus;
 
-    @Column(name = "refund_amount")
+    @Column(name = "refund_amount", precision = 12, scale = 2)
     private BigDecimal refundAmount;
 
     @Column(name = "refund_percent")
@@ -72,9 +71,6 @@ public class UserSubscription {
 
     @Column(name = "refund_reason")
     private String refundReason;
-
-    @Column(name = "payment_transaction_id")
-    private String paymentTransactionId;
 
     @Column(name = "refund_transaction_id")
     private String refundTransactionId;
@@ -98,6 +94,18 @@ public class UserSubscription {
 
         if (autoRenew == null) {
             autoRenew = false;
+        }
+
+        if (refundStatus == null) {
+            refundStatus = RefundStatus.NOT_ELIGIBLE;
+        }
+
+        if (refundAmount == null) {
+            refundAmount = BigDecimal.ZERO;
+        }
+
+        if (refundPercent == null) {
+            refundPercent = 0;
         }
     }
 

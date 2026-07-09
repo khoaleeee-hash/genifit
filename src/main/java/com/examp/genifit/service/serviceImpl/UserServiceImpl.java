@@ -7,9 +7,7 @@ import com.examp.genifit.dto.request.AssignSubscriptionRequest;
 import com.examp.genifit.dto.request.CreateUserRequest;
 import com.examp.genifit.dto.request.ResetPasswordRequest;
 import com.examp.genifit.dto.request.UpdateUserProfileRequest;
-import com.examp.genifit.dto.response.CancelSubscriptionResponse;
-import com.examp.genifit.dto.response.UserProfileResponse;
-import com.examp.genifit.dto.response.UserResponse;
+import com.examp.genifit.dto.response.*;
 import com.examp.genifit.entity.OtpToken;
 import com.examp.genifit.entity.User;
 import com.examp.genifit.entity.UserProfile;
@@ -17,12 +15,12 @@ import com.examp.genifit.entity.UserRole;
 import com.examp.genifit.mapper.UserMapper;
 import com.examp.genifit.repository.OtpTokenRepository;
 import com.examp.genifit.repository.UserProfileRepository;
-import com.examp.genifit.dto.response.UserSubscriptionResponse;
 import com.examp.genifit.entity.*;
 import com.examp.genifit.repository.SubscriptionPlanRepository;
 import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.repository.UserSubscriptionRepository;
 import com.examp.genifit.service.EmailService;
+import com.examp.genifit.service.MoMoService;
 import com.examp.genifit.service.UserService;
 import com.examp.genifit.util.CalorieCalculatorUtil;
 import lombok.AccessLevel;
@@ -59,6 +57,7 @@ public class UserServiceImpl implements UserService {
     PasswordEncoder passwordEncoder;
     EmailService emailService;
     UserProfileRepository userProfileRepository;
+    MoMoService  moMoService;
 
     @Override
     @Transactional
@@ -253,6 +252,42 @@ public class UserServiceImpl implements UserService {
 
         if (refundResult.refundStatus() == RefundStatus.PENDING) {
             subscription.setRefundRequestedAt(now);
+
+            PaymentTransaction transaction = subscription.getTransaction();
+
+            if (transaction == null) {
+                subscription.setRefundStatus(RefundStatus.REJECTED);
+                subscription.setRefundReason("Không tìm thấy giao dịch thanh toán gốc để hoàn tiền");
+            } else if (transaction.getPaymentMethod() != PaymentTransaction.PaymentMethod.MOMO) {
+                subscription.setRefundStatus(RefundStatus.REJECTED);
+                subscription.setRefundReason("Giao dịch không phải MoMo, không thể hoàn tiền qua MoMo");
+            } else if (transaction.getGatewayTransactionId() == null
+                    || transaction.getGatewayTransactionId().isBlank()) {
+                subscription.setRefundStatus(RefundStatus.REJECTED);
+                subscription.setRefundReason("Không tìm thấy mã giao dịch MoMo để hoàn tiền");
+            } else {
+                MoMoRefundResponse momoRefundResponse = moMoService.refund(
+                        transaction.getOrderCode(),
+                        transaction.getGatewayTransactionId(),
+                        refundResult.refundAmount(),
+                        refundResult.message()
+                );
+
+                if (momoRefundResponse.isSuccess()) {
+                    subscription.setRefundStatus(RefundStatus.COMPLETED);
+                    subscription.setRefundCompletedAt(LocalDateTime.now());
+                    subscription.setRefundTransactionId(momoRefundResponse.getRefundTransactionId());
+                    subscription.setRefundReason("Hoàn tiền MoMo thành công: " + momoRefundResponse.getMessage());
+                } else if (momoRefundResponse.isPending()) {
+                    subscription.setRefundStatus(RefundStatus.PENDING);
+                    subscription.setRefundTransactionId(momoRefundResponse.getRefundTransactionId());
+                    subscription.setRefundReason("MoMo đang xử lý hoàn tiền: " + momoRefundResponse.getMessage());
+                } else {
+                    subscription.setRefundStatus(RefundStatus.REJECTED);
+                    subscription.setRefundTransactionId(momoRefundResponse.getRefundTransactionId());
+                    subscription.setRefundReason("Hoàn tiền MoMo thất bại: " + momoRefundResponse.getMessage());
+                }
+            }
         }
 
         UserSubscription saved = userSubscriptionRepository.save(subscription);
@@ -264,14 +299,14 @@ public class UserServiceImpl implements UserService {
                 .endDate(saved.getEndDate())
                 .cancelledAt(saved.getCancelledAt())
                 .usedDays(refundResult.usedDays())
-                .refundEligible(refundResult.refundAmount().compareTo(BigDecimal.ZERO) > 0)
-                .refundStatus(refundResult.refundStatus())
-                .refundPercent(refundResult.refundPercent())
-                .refundAmount(refundResult.refundAmount())
-                .refundMessage(refundResult.message())
+                .refundEligible(saved.getRefundAmount() != null
+                        && saved.getRefundAmount().compareTo(BigDecimal.ZERO) > 0)
+                .refundStatus(saved.getRefundStatus())
+                .refundPercent(saved.getRefundPercent())
+                .refundAmount(saved.getRefundAmount())
+                .refundMessage(saved.getRefundReason())
                 .build();
     }
-
     private RefundResult calculateRefund(
             UserSubscription subscription,
             LocalDateTime now

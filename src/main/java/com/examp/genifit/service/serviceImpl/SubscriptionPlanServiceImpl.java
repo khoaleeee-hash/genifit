@@ -6,10 +6,7 @@ import com.examp.genifit.dto.request.CreateSubscriptionPlanRequest;
 import com.examp.genifit.dto.request.SubscribePlanRequest;
 import com.examp.genifit.dto.request.UpdateSubscriptionPlanRequest;
 import com.examp.genifit.dto.response.*;
-import com.examp.genifit.entity.SubscriptionPlan;
-import com.examp.genifit.entity.SubscriptionStatus;
-import com.examp.genifit.entity.User;
-import com.examp.genifit.entity.UserSubscription;
+import com.examp.genifit.entity.*;
 import com.examp.genifit.repository.SubscriptionPlanRepository;
 import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.repository.UserSubscriptionRepository;
@@ -169,20 +166,28 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
             );
         }
 
+        if (plan.getPrice() != null && plan.getPrice().compareTo(BigDecimal.ZERO) > 0) {
+            throw new ApiException(
+                    ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
+                    "Gói trả phí phải thanh toán trước khi đăng ký"
+            );
+        }
+
         LocalDateTime now = LocalDateTime.now();
 
-        Optional<UserSubscription> currentActiveOpt  = userSubscriptionRepository
-                .findFirstByUserAndStatusOrderByEndDateDesc(
+        Optional<UserSubscription> currentActiveOpt =
+                userSubscriptionRepository.findFirstByUserAndStatusOrderByEndDateDesc(
                         user,
-                        SubscriptionStatus.ACTIVE);
+                        SubscriptionStatus.ACTIVE
+                );
 
-        if(currentActiveOpt.isPresent()) {
+        if (currentActiveOpt.isPresent()) {
             UserSubscription currentSubscription = currentActiveOpt.get();
 
             boolean samePlan = currentSubscription
                     .getSubscriptionPlan()
                     .getPlanId()
-                    .equals(request.getPlanId());
+                    .equals(plan.getPlanId());
 
             if (!samePlan) {
                 throw new ApiException(
@@ -198,13 +203,16 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
 
             currentSubscription.setEndDate(baseDate.plusDays(plan.getDurationDays()));
             currentSubscription.setAutoRenew(false);
+            currentSubscription.setRefundStatus(RefundStatus.NOT_ELIGIBLE);
+            currentSubscription.setRefundAmount(BigDecimal.ZERO);
+            currentSubscription.setRefundPercent(0);
 
             UserSubscription saved = userSubscriptionRepository.save(currentSubscription);
 
             return new UserSubscriptionResponse(saved);
         }
 
-        LocalDateTime startDate = LocalDateTime.now();
+        LocalDateTime startDate = now;
         LocalDateTime endDate = startDate.plusDays(plan.getDurationDays());
 
         UserSubscription newSubscription = UserSubscription.builder()
@@ -213,8 +221,10 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
                 .startDate(startDate)
                 .endDate(endDate)
                 .status(SubscriptionStatus.ACTIVE)
-//                .autoRenew(Boolean.TRUE.equals(request.getAutoRenew()))
                 .autoRenew(false)
+                .refundStatus(RefundStatus.NOT_ELIGIBLE)
+                .refundAmount(BigDecimal.ZERO)
+                .refundPercent(0)
                 .build();
 
         UserSubscription saved = userSubscriptionRepository.save(newSubscription);
