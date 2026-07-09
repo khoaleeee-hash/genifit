@@ -22,13 +22,18 @@ public class UserSubscription {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer subscriptionId;
 
-    @ManyToOne
+    @OneToOne
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
     @ManyToOne
     @JoinColumn(name = "plan_id", nullable = false)
     private SubscriptionPlan subscriptionPlan;
+
+    // Transaction tạo ra subscription này (lần mua gần nhất)
+    @OneToOne
+    @JoinColumn(name = "transaction_id")
+    private PaymentTransaction transaction;
 
     @Column(nullable = false)
     private LocalDateTime startDate;
