@@ -5,18 +5,22 @@ import com.examp.genifit.common.exception.ErrorCode;
 import com.examp.genifit.dto.request.CreateSubscriptionPlanRequest;
 import com.examp.genifit.dto.request.SubscribePlanRequest;
 import com.examp.genifit.dto.request.UpdateSubscriptionPlanRequest;
-import com.examp.genifit.dto.response.*;
-import com.examp.genifit.entity.*;
+import com.examp.genifit.dto.response.MySubscriptionResponse;
+import com.examp.genifit.dto.response.SubscriptionPlanResponse;
+import com.examp.genifit.dto.response.UserSubscriptionResponse;
+import com.examp.genifit.entity.SubscriptionPlan;
+import com.examp.genifit.entity.SubscriptionStatus;
+import com.examp.genifit.entity.User;
+import com.examp.genifit.entity.UserSubscription;
+import com.examp.genifit.mapper.SubscriptionPlanMapper;
+import com.examp.genifit.mapper.UserSubscriptionMapper;
 import com.examp.genifit.repository.SubscriptionPlanRepository;
 import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.repository.UserSubscriptionRepository;
 import com.examp.genifit.service.SubscriptionPlanService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -25,59 +29,38 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Transactional
 public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
 
     private final SubscriptionPlanRepository subscriptionPlanRepository;
     private final UserRepository userRepository;
     private final UserSubscriptionRepository userSubscriptionRepository;
+    private final SubscriptionPlanMapper subscriptionPlanMapper;
+    private final UserSubscriptionMapper userSubscriptionMapper;
+
+    // =========================================================================
+    // PUBLIC API - PLAN MANAGEMENT
+    // =========================================================================
 
     @Override
-    public PageResponse<SubscriptionPlanResponse> getAllPlans(Integer pageNum, Integer pageSize) {
+    public Page<SubscriptionPlanResponse> getAllPlans(Integer pageNum, Integer pageSize) {
         Pageable pageable = buildPageable(pageNum, pageSize);
-
-        Page<SubscriptionPlanResponse> page = subscriptionPlanRepository.findByDeletedFalse(pageable)
-                .map(SubscriptionPlanResponse::new);
-
-        return buildPageResponse(page);
+        return subscriptionPlanRepository
+                .findByDeletedFalse(pageable)
+                .map(subscriptionPlanMapper::toResponse);
     }
 
     @Override
-    public PageResponse<SubscriptionPlanResponse> getActivePlans(Integer pageNum, Integer pageSize) {
+    public Page<SubscriptionPlanResponse> getActivePlans(Integer pageNum, Integer pageSize) {
         Pageable pageable = buildPageable(pageNum, pageSize);
-
-        Page<SubscriptionPlanResponse> page = subscriptionPlanRepository.findByActiveTrueAndDeletedFalse(pageable)
-                .map(SubscriptionPlanResponse::new);
-
-        return buildPageResponse(page);
+        return subscriptionPlanRepository
+                .findByActiveTrueAndDeletedFalseOrderByPriceAsc(pageable)
+                .map(subscriptionPlanMapper::toResponse);
     }
 
     @Override
     public SubscriptionPlanResponse getPlanById(Integer planId) {
-        SubscriptionPlan plan = subscriptionPlanRepository.findByPlanIdAndDeletedFalse(planId)
-                .orElseThrow(() -> new ApiException(
-                        ErrorCode.SUBSCRIPTION_PLAN_NOT_FOUND,
-                        "Không tìm thấy gói đăng ký"
-                ));
-
-        return new SubscriptionPlanResponse(plan);
-    }
-
-    @Override
-    public MySubscriptionResponse getMySubscription(String username) {
-        User user = userRepository.findByUsernameAndIsActiveTrue(username)
-                .orElseThrow(() -> new ApiException(
-                        ErrorCode.USER_NOT_FOUND,
-                        "Không tìm thấy người dùng"
-                        ));
-
-        UserSubscription userSubscription = userSubscriptionRepository
-                .findByUserUserIdAndStatus(user.getUserId(), SubscriptionStatus.ACTIVE)
-                .orElseThrow(() -> new ApiException(
-                        ErrorCode.ACTIVE_SUBSCRIPTION_NOT_FOUND,
-                        "Người dùng chưa có gói đăng ký hoạt động"
-                        ));
-
-        return new MySubscriptionResponse(userSubscription);
+        return subscriptionPlanMapper.toResponse(findPlanById(planId));
     }
 
     @Override
@@ -85,292 +68,144 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
         validateCreateRequest(request);
 
         if (subscriptionPlanRepository.existsByPlanTypeAndDeletedFalse(request.getPlanType())) {
-            throw new ApiException(
-                    ErrorCode.SUBSCRIPTION_PLAN_EXISTED,
-                    "Gói đăng ký này đã tồn tại"
-            );
+            throw new ApiException(ErrorCode.SUBSCRIPTION_PLAN_EXISTED, "Plan type đã tồn tại");
         }
 
-        SubscriptionPlan plan = SubscriptionPlan.builder()
-                .planType(request.getPlanType())
-                .planName(request.getPlanName())
-                .description(request.getDescription())
-                .price(request.getPrice() == null ? BigDecimal.ZERO : request.getPrice())
-                .durationDays(request.getDurationDays() == null ? 30 : request.getDurationDays())
+        SubscriptionPlan plan = subscriptionPlanMapper.toEntity(request);
+        applyDefaults(plan, request);
 
-                .aiScanLimitPerMonth(request.getAiScanLimitPerMonth() == null ? 0 : request.getAiScanLimitPerMonth())
-                .mealSuggestionLimitPerMonth(request.getMealSuggestionLimitPerMonth() == null ? 0 : request.getMealSuggestionLimitPerMonth())
-                .reminderLimit(request.getReminderLimit() == null ? 0 : request.getReminderLimit())
-
-                .maxMembers(request.getMaxMembers() == null ? 1 : request.getMaxMembers())
-                .maxClients(request.getMaxClients() == null ? 0 : request.getMaxClients())
-
-                .trial(request.getTrial() == null ? false : request.getTrial())
-                .familySharingEnabled(request.getFamilySharingEnabled() == null ? false : request.getFamilySharingEnabled())
-                .coachFeaturesEnabled(request.getCoachFeaturesEnabled() == null ? false : request.getCoachFeaturesEnabled())
-
-                .mealPlanEnabled(request.getMealPlanEnabled() == null ? false : request.getMealPlanEnabled())
-                .weeklyReportEnabled(request.getWeeklyReportEnabled() == null ? false : request.getWeeklyReportEnabled())
-                .monthlyReportEnabled(request.getMonthlyReportEnabled() == null ? false : request.getMonthlyReportEnabled())
-                .exportReportEnabled(request.getExportReportEnabled() == null ? false : request.getExportReportEnabled())
-
-                .macroTrackingEnabled(request.getMacroTrackingEnabled() == null ? false : request.getMacroTrackingEnabled())
-                .calorieDeficitTrackingEnabled(request.getCalorieDeficitTrackingEnabled() == null ? false : request.getCalorieDeficitTrackingEnabled())
-                .calorieSurplusTrackingEnabled(request.getCalorieSurplusTrackingEnabled() == null ? false : request.getCalorieSurplusTrackingEnabled())
-                .bloodSugarControlEnabled(request.getBloodSugarControlEnabled() == null ? false : request.getBloodSugarControlEnabled())
-                .active(request.getActive() == null ? true : request.getActive())
-                .deleted(false)
-                .build();
-
-        SubscriptionPlan savedPlan = subscriptionPlanRepository.save(plan);
-
-        return new SubscriptionPlanResponse(savedPlan);
+        return subscriptionPlanMapper.toResponse(subscriptionPlanRepository.save(plan));
     }
 
     @Override
-    @Transactional
-    public UserSubscriptionResponse subscribePlan(
-            String username,
-            SubscribePlanRequest request
-    ) {
-        User user = userRepository.findByUsernameAndIsActiveTrue(username)
-                .orElseThrow(() -> new ApiException(
-                        ErrorCode.USER_NOT_FOUND,
-                        "Không tìm thấy người dùng đăng nhập"
-                ));
+    public SubscriptionPlanResponse updatePlan(Integer planId, UpdateSubscriptionPlanRequest request) {
+        SubscriptionPlan plan = findPlanById(planId);
 
-        SubscriptionPlan plan = subscriptionPlanRepository.findById(request.getPlanId())
-                .orElseThrow(() -> new ApiException(
-                        ErrorCode.SUBSCRIPTION_PLAN_NOT_FOUND,
-                        "Không tìm thấy gói đăng kí"
-                ));
-
-        if (Boolean.FALSE.equals(plan.getActive())) {
-            throw new ApiException(
-                    ErrorCode.SUBSCRIPTION_PLAN_INACTIVE,
-                    "Gói đăng kí này hiện không còn hoạt động"
-            );
+        if (request.getPlanType() != null && !request.getPlanType().equals(plan.getPlanType())) {
+            if (subscriptionPlanRepository.existsByPlanTypeAndDeletedFalse(request.getPlanType())) {
+                throw new ApiException(ErrorCode.SUBSCRIPTION_PLAN_EXISTED, "Plan type đã tồn tại");
+            }
         }
 
-        if (Boolean.TRUE.equals(plan.getDeleted())) {
-            throw new ApiException(
-                    ErrorCode.SUBSCRIPTION_PLAN_NOT_FOUND,
-                    "Gói đăng kí này đã bị xoá"
-            );
-        }
+        subscriptionPlanMapper.updateEntity(request, plan);
 
-        if (plan.getDurationDays() == null || plan.getDurationDays() <= 0) {
-            throw new ApiException(
-                    ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
-                    "Thời hạn gói đăng kí không hợp lệ"
-            );
-        }
+        return subscriptionPlanMapper.toResponse(subscriptionPlanRepository.save(plan));
+    }
 
-        if (plan.getPrice() != null && plan.getPrice().compareTo(BigDecimal.ZERO) > 0) {
-            throw new ApiException(
-                    ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
-                    "Gói trả phí phải thanh toán trước khi đăng ký"
-            );
-        }
+    @Override
+    public void deletePlan(Integer planId) {
+        SubscriptionPlan plan = findPlanById(planId);
+        plan.setDeleted(true);
+        plan.setActive(false);
+        subscriptionPlanRepository.save(plan);
+    }
 
-        LocalDateTime now = LocalDateTime.now();
+    // =========================================================================
+    // PUBLIC API - USER SUBSCRIPTION
+    // =========================================================================
 
-        Optional<UserSubscription> currentActiveOpt =
+    @Override
+    public MySubscriptionResponse getMySubscription(String username) {
+        User user = findUserByUsername(username);
+        UserSubscription subscription = findActiveSubscription(user);
+        return userSubscriptionMapper.toMySubscription(subscription);
+    }
+
+    @Override
+    public UserSubscriptionResponse subscribePlan(String username, SubscribePlanRequest request) {
+        User user = findUserByUsername(username);
+        SubscriptionPlan plan = findPlanById(request.getPlanId());
+
+        validatePlanForSubscription(plan);
+        requireFreePlan(plan);
+
+        Optional<UserSubscription> activeSubscription =
                 userSubscriptionRepository.findFirstByUserAndStatusOrderByEndDateDesc(
                         user,
                         SubscriptionStatus.ACTIVE
                 );
 
-        if (currentActiveOpt.isPresent()) {
-            UserSubscription currentSubscription = currentActiveOpt.get();
-
-            boolean samePlan = currentSubscription
-                    .getSubscriptionPlan()
-                    .getPlanId()
-                    .equals(plan.getPlanId());
-
-            if (!samePlan) {
-                throw new ApiException(
-                        ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
-                        "Bạn đã có gói đăng ký hoạt động, vui lòng huỷ gói hiện tại trước khi đăng ký gói mới"
-                );
-            }
-
-            LocalDateTime baseDate = currentSubscription.getEndDate() != null
-                    && currentSubscription.getEndDate().isAfter(now)
-                    ? currentSubscription.getEndDate()
-                    : now;
-
-            currentSubscription.setEndDate(baseDate.plusDays(plan.getDurationDays()));
-            currentSubscription.setAutoRenew(false);
-            currentSubscription.setRefundStatus(RefundStatus.NOT_ELIGIBLE);
-            currentSubscription.setRefundAmount(BigDecimal.ZERO);
-            currentSubscription.setRefundPercent(0);
-
-            UserSubscription saved = userSubscriptionRepository.save(currentSubscription);
-
-            return new UserSubscriptionResponse(saved);
+        if (activeSubscription.isPresent()) {
+            return extendExistingSubscription(activeSubscription.get(), plan, request);
         }
 
-        LocalDateTime startDate = now;
-        LocalDateTime endDate = startDate.plusDays(plan.getDurationDays());
+        return createNewSubscription(user, plan, request);
+    }
 
-        UserSubscription newSubscription = UserSubscription.builder()
+    @Override
+    public UserSubscriptionResponse cancelSubscription(String username) {
+        User user = findUserByUsername(username);
+        UserSubscription subscription = findActiveSubscription(user);
+
+        subscription.setStatus(SubscriptionStatus.CANCELLED);
+        subscription.setCancelledAt(LocalDateTime.now());
+        subscription.setAutoRenew(false);
+
+        return userSubscriptionMapper.toResponse(userSubscriptionRepository.save(subscription));
+    }
+
+    @Override
+    public UserSubscriptionResponse renewSubscription(String username) {
+        User user = findUserByUsername(username);
+        UserSubscription subscription = findActiveSubscription(user);
+        SubscriptionPlan plan = subscription.getSubscriptionPlan();
+
+        validatePlanForSubscription(plan);
+        requireFreePlan(plan);
+
+        subscription.setEndDate(
+                calculateRenewEndDate(subscription.getEndDate(), plan.getDurationDays())
+        );
+
+        return userSubscriptionMapper.toResponse(userSubscriptionRepository.save(subscription));
+    }
+
+    // =========================================================================
+    // PRIVATE - SUBSCRIPTION HELPERS
+    // =========================================================================
+
+    private UserSubscriptionResponse extendExistingSubscription(
+            UserSubscription current,
+            SubscriptionPlan plan,
+            SubscribePlanRequest request
+    ) {
+        boolean samePlan = current.getSubscriptionPlan().getPlanId().equals(plan.getPlanId());
+
+        if (!samePlan) {
+            throw new ApiException(
+                    ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
+                    "Bạn đang sử dụng gói khác."
+            );
+        }
+
+        current.setEndDate(calculateRenewEndDate(current.getEndDate(), plan.getDurationDays()));
+        current.setAutoRenew(Boolean.TRUE.equals(request.getAutoRenew()));
+
+        return userSubscriptionMapper.toResponse(userSubscriptionRepository.save(current));
+    }
+
+    private UserSubscriptionResponse createNewSubscription(
+            User user,
+            SubscriptionPlan plan,
+            SubscribePlanRequest request
+    ) {
+        LocalDateTime now = LocalDateTime.now();
+
+        UserSubscription subscription = UserSubscription.builder()
                 .user(user)
                 .subscriptionPlan(plan)
-                .startDate(startDate)
-                .endDate(endDate)
+                .startDate(now)
+                .endDate(now.plusDays(plan.getDurationDays()))
                 .status(SubscriptionStatus.ACTIVE)
-                .autoRenew(false)
-                .refundStatus(RefundStatus.NOT_ELIGIBLE)
-                .refundAmount(BigDecimal.ZERO)
-                .refundPercent(0)
+                .autoRenew(Boolean.TRUE.equals(request.getAutoRenew()))
                 .build();
 
-        UserSubscription saved = userSubscriptionRepository.save(newSubscription);
-
-        return new UserSubscriptionResponse(saved);
+        return userSubscriptionMapper.toResponse(userSubscriptionRepository.save(subscription));
     }
 
-    @Override
-    public SubscriptionPlanResponse updatePlan(Integer planId, UpdateSubscriptionPlanRequest request) {
-        SubscriptionPlan plan = subscriptionPlanRepository.findByPlanIdAndDeletedFalse(planId)
-                .orElseThrow(() -> new ApiException(
-                        ErrorCode.SUBSCRIPTION_PLAN_NOT_FOUND,
-                        "Không tìm thấy gói đăng ký"));
-
-        if (request.getPlanType() != null && !request.getPlanType().equals(plan.getPlanType())) {
-            if (subscriptionPlanRepository.existsByPlanTypeAndDeletedFalse(request.getPlanType())) {
-                throw new ApiException(
-                        ErrorCode.SUBSCRIPTION_PLAN_EXISTED,
-                        "Loại gói đăng ký này đã tồn tại"
-                );
-            }
-            plan.setPlanType(request.getPlanType());
-        }
-
-        if (request.getPlanName() != null) {
-            plan.setPlanName(request.getPlanName());
-        }
-
-        if (request.getDescription() != null) {
-            plan.setDescription(request.getDescription());
-        }
-
-        if (request.getPrice() != null) {
-            plan.setPrice(request.getPrice());
-        }
-
-        if (request.getDurationDays() != null) {
-            plan.setDurationDays(request.getDurationDays());
-        }
-
-        if (request.getAiScanLimitPerMonth() != null) {
-            plan.setAiScanLimitPerMonth(request.getAiScanLimitPerMonth());
-        }
-
-        if (request.getMealSuggestionLimitPerMonth() != null) {
-            plan.setMealSuggestionLimitPerMonth(request.getMealSuggestionLimitPerMonth());
-        }
-
-        if (request.getReminderLimit() != null) {
-            plan.setReminderLimit(request.getReminderLimit());
-        }
-
-        if (request.getMaxMembers() != null) {
-            plan.setMaxMembers(request.getMaxMembers());
-        }
-
-        if (request.getMaxClients() != null) {
-            plan.setMaxClients(request.getMaxClients());
-        }
-
-        if (request.getTrial() != null) {
-            plan.setTrial(request.getTrial());
-        }
-
-        if (request.getFamilySharingEnabled() != null) {
-            plan.setFamilySharingEnabled(request.getFamilySharingEnabled());
-        }
-
-        if (request.getCoachFeaturesEnabled() != null) {
-            plan.setCoachFeaturesEnabled(request.getCoachFeaturesEnabled());
-        }
-
-        if (request.getMealPlanEnabled() != null) {
-            plan.setMealPlanEnabled(request.getMealPlanEnabled());
-        }
-
-        if (request.getWeeklyReportEnabled() != null) {
-            plan.setWeeklyReportEnabled(request.getWeeklyReportEnabled());
-        }
-
-        if (request.getMonthlyReportEnabled() != null) {
-            plan.setMonthlyReportEnabled(request.getMonthlyReportEnabled());
-        }
-
-        if (request.getExportReportEnabled() != null) {
-            plan.setExportReportEnabled(request.getExportReportEnabled());
-        }
-
-        if (request.getMacroTrackingEnabled() != null) {
-            plan.setMacroTrackingEnabled(request.getMacroTrackingEnabled());
-        }
-
-        if (request.getCalorieDeficitTrackingEnabled() != null) {
-            plan.setCalorieDeficitTrackingEnabled(request.getCalorieDeficitTrackingEnabled());
-        }
-
-        if (request.getCalorieSurplusTrackingEnabled() != null) {
-            plan.setCalorieSurplusTrackingEnabled(request.getCalorieSurplusTrackingEnabled());
-        }
-
-        if (request.getBloodSugarControlEnabled() != null) {
-            plan.setBloodSugarControlEnabled(request.getBloodSugarControlEnabled());
-        }
-
-        if (request.getActive() != null) {
-            plan.setActive(request.getActive());
-        }
-
-        SubscriptionPlan updatedPlan = subscriptionPlanRepository.save(plan);
-
-        return new SubscriptionPlanResponse(updatedPlan);
-    }
-
-    @Override
-    public void deletePlan(Integer planId) {
-        SubscriptionPlan plan = subscriptionPlanRepository.findByPlanIdAndDeletedFalse(planId)
-                .orElseThrow(() -> new ApiException(
-                        ErrorCode.SUBSCRIPTION_PLAN_NOT_FOUND,
-                        "Không tìm thấy gói đăng ký"
-                ));
-
-        plan.setDeleted(true);
-        plan.setActive(false);
-
-        subscriptionPlanRepository.save(plan);
-    }
-
-    private Pageable buildPageable(Integer pageNum, Integer pageSize) {
-        if (pageNum == null || pageNum < 1) {
-            pageNum = 1;
-        }
-
-        if (pageSize == null || pageSize < 1) {
-            pageSize = 10;
-        }
-
-        if (pageSize > 50) {
-            pageSize = 50;
-        }
-
-        return PageRequest.of(
-                pageNum - 1,
-                pageSize,
-                Sort.by(Sort.Direction.ASC, "planId")
-        );
-    }
+    // =========================================================================
+    // PRIVATE - VALIDATION
+    // =========================================================================
 
     private void validateCreateRequest(CreateSubscriptionPlanRequest request) {
         if (request == null) {
@@ -379,47 +214,137 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
                     "Request không được để trống"
             );
         }
-
         if (request.getPlanType() == null) {
             throw new ApiException(
                     ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
-                    "planType không được để trống"
+                    "Plan type không được để trống"
             );
         }
-
         if (request.getPlanName() == null || request.getPlanName().trim().isEmpty()) {
             throw new ApiException(
                     ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
-                    "planName không được để trống"
+                    "Tên gói không được để trống"
             );
         }
-
         if (request.getPrice() != null && request.getPrice().compareTo(BigDecimal.ZERO) < 0) {
             throw new ApiException(
                     ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
-                    "price không được nhỏ hơn 0"
+                    "Giá tiền phải lớn hơn hoặc bằng 0"
             );
         }
-
         if (request.getDurationDays() != null && request.getDurationDays() <= 0) {
             throw new ApiException(
                     ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
-                    "durationDays phải lớn hơn 0"
+                    "Duration phải lớn hơn 0"
+            );
+        }
+        if (subscriptionPlanRepository.existsByPlanNameIgnoreCaseAndDeletedFalse(
+                request.getPlanName().trim())) {
+            throw new ApiException(
+                    ErrorCode.SUBSCRIPTION_PLAN_EXISTED,
+                    "Tên gói đã tồn tại"
             );
         }
     }
 
-    private PageResponse<SubscriptionPlanResponse> buildPageResponse(Page<SubscriptionPlanResponse> page) {
-        return PageResponse.<SubscriptionPlanResponse>builder()
-                .content(page.getContent())
-                .pageInfo(
-                        PageInfoResponse.builder()
-                                .pageNum(page.getNumber() + 1)
-                                .pageSize(page.getSize())
-                                .totalPage(page.getTotalPages())
-                                .totalItem(page.getTotalElements())
-                                .build()
-                )
-                .build();
+    private void validatePlanForSubscription(SubscriptionPlan plan) {
+        if (Boolean.TRUE.equals(plan.getDeleted())) {
+            throw new ApiException(
+                    ErrorCode.SUBSCRIPTION_PLAN_NOT_FOUND,
+                    "Gói đăng ký đã bị xóa"
+            );
+        }
+        if (Boolean.FALSE.equals(plan.getActive())) {
+            throw new ApiException(
+                    ErrorCode.SUBSCRIPTION_PLAN_INACTIVE,
+                    "Gói đăng ký chưa được kích hoạt"
+            );
+        }
+        if (plan.getDurationDays() == null || plan.getDurationDays() <= 0) {
+            throw new ApiException(
+                    ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
+                    "Duration không hợp lệ"
+            );
+        }
+    }
+
+    /**
+     * Chặn gói trả phí.
+     * Sau này thay bằng: paymentService.createPayment(...)
+     */
+    private void requireFreePlan(SubscriptionPlan plan) {
+        if (plan.getPrice().compareTo(BigDecimal.ZERO) > 0) {
+            throw new ApiException(
+                    ErrorCode.PAYMENT_REQUIRED,
+                    "Gói trả phí cần thanh toán trước."
+            );
+        }
+    }
+
+    // =========================================================================
+    // PRIVATE - DEFAULTS
+    // =========================================================================
+
+    /**
+     * Áp dụng default value sau khi MapStruct đã map từ request.
+     */
+    private void applyDefaults(SubscriptionPlan plan, CreateSubscriptionPlanRequest request) {
+        if (plan.getPrice() == null)        plan.setPrice(BigDecimal.ZERO);
+        if (plan.getDurationDays() == null) plan.setDurationDays(30);
+        if (plan.getMaxMembers() == null)   plan.setMaxMembers(1);
+        if (plan.getActive() == null)       plan.setActive(request.getActive() == null || request.getActive());
+        plan.setDeleted(false);
+    }
+
+    // =========================================================================
+    // PRIVATE - REPOSITORY SHORTCUTS
+    // =========================================================================
+
+    private User findUserByUsername(String username) {
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.USER_NOT_FOUND,
+                        "Không tìm thấy người dùng"
+                ));
+    }
+
+    private SubscriptionPlan findPlanById(Integer planId) {
+        return subscriptionPlanRepository.findByPlanIdAndDeletedFalse(planId)
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.SUBSCRIPTION_PLAN_NOT_FOUND,
+                        "Không tìm thấy gói đăng ký"
+                ));
+    }
+
+    private UserSubscription findActiveSubscription(User user) {
+        return userSubscriptionRepository
+                .findFirstByUserAndStatusOrderByEndDateDesc(user, SubscriptionStatus.ACTIVE)
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.ACTIVE_SUBSCRIPTION_NOT_FOUND,
+                        "Không có gói đăng ký đang hoạt động"
+                ));
+    }
+
+    // =========================================================================
+    // PRIVATE - UTILITIES
+    // =========================================================================
+
+    private Pageable buildPageable(Integer pageNum, Integer pageSize) {
+        pageNum  = (pageNum  == null || pageNum  < 1) ? 1  : pageNum;
+        pageSize = (pageSize == null || pageSize < 1) ? 10 : pageSize;
+        pageSize = Math.min(pageSize, 100);
+
+        return PageRequest.of(
+                pageNum - 1,
+                pageSize,
+                Sort.by(Sort.Direction.ASC, "price").and(Sort.by("planId"))
+        );
+    }
+
+    private LocalDateTime calculateRenewEndDate(LocalDateTime currentEndDate, Integer durationDays) {
+        LocalDateTime base = (currentEndDate != null && currentEndDate.isAfter(LocalDateTime.now()))
+                ? currentEndDate
+                : LocalDateTime.now();
+        return base.plusDays(durationDays);
     }
 }

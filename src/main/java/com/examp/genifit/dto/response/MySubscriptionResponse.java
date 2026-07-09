@@ -56,37 +56,4 @@ public class MySubscriptionResponse {
 
     private Boolean bloodSugarControlEnabled;
 
-    public MySubscriptionResponse(UserSubscription userSubscription) {
-        this.subscriptionId = userSubscription.getSubscriptionId();
-
-        this.status = userSubscription.getStatus().name();
-        this.startDate = userSubscription.getStartDate();
-        this.endDate = userSubscription.getEndDate();
-
-        if (userSubscription.getSubscriptionPlan() != null) {
-            var plan = userSubscription.getSubscriptionPlan();
-
-            this.planId = plan.getPlanId();
-            this.planType = plan.getPlanType().name();
-            this.planName = plan.getPlanName();
-            this.description = plan.getDescription();
-            this.active = plan.getActive();
-
-            this.aiScanLimitPerMonth = plan.getAiScanLimitPerMonth();
-            this.mealSuggestionLimitPerMonth = plan.getMealSuggestionLimitPerMonth();
-            this.reminderLimit = plan.getReminderLimit();
-
-            this.familySharingEnabled = plan.getFamilySharingEnabled();
-            this.coachFeaturesEnabled = plan.getCoachFeaturesEnabled();
-            this.mealPlanEnabled = plan.getMealPlanEnabled();
-            this.weeklyReportEnabled = plan.getWeeklyReportEnabled();
-            this.monthlyReportEnabled = plan.getMonthlyReportEnabled();
-            this.exportReportEnabled = plan.getExportReportEnabled();
-
-            this.macroTrackingEnabled = plan.getMacroTrackingEnabled();
-            this.calorieDeficitTrackingEnabled = plan.getCalorieDeficitTrackingEnabled();
-            this.calorieSurplusTrackingEnabled = plan.getCalorieSurplusTrackingEnabled();
-            this.bloodSugarControlEnabled = plan.getBloodSugarControlEnabled();
-        }
-    }
 }
