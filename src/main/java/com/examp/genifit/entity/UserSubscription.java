@@ -3,6 +3,10 @@ package com.examp.genifit.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -44,6 +48,31 @@ public class UserSubscription {
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "refund_status")
+    private RefundStatus refundStatus;
+
+    @Column(name = "refund_amount")
+    private BigDecimal refundAmount;
+
+    @Column(name = "refund_percent")
+    private Integer refundPercent;
+
+    @Column(name = "refund_requested_at")
+    private LocalDateTime refundRequestedAt;
+
+    @Column(name = "refund_completed_at")
+    private LocalDateTime refundCompletedAt;
+
+    @Column(name = "refund_reason")
+    private String refundReason;
+
+    @Column(name = "payment_transaction_id")
+    private String paymentTransactionId;
+
+    @Column(name = "refund_transaction_id")
+    private String refundTransactionId;
 
     @PrePersist
     public void onCreate() {

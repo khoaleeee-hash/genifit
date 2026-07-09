@@ -1,5 +1,7 @@
 package com.examp.genifit.service.serviceImpl;
 
+import com.examp.genifit.common.exception.ApiException;
+import com.examp.genifit.common.exception.ErrorCode;
 import com.examp.genifit.dto.request.GeminiMealSuggestionRequest;
 import com.examp.genifit.dto.request.IngredientRequest;
 import com.examp.genifit.dto.response.GeminiMealSuggestionResponse;
@@ -104,7 +106,10 @@ public class GeminiMealSuggestionServiceImpl implements GeminiMealSuggestionServ
                 .findByIsPublicTrueAndApprovalStatusAndDeletedFalse(FoodApprovalStatus.APPROVED);
 
         if (approvedFoods.isEmpty()) {
-            throw new RuntimeException("Chưa có món ăn chuẩn đã được admin duyệt trong database");
+            throw new ApiException(
+                    ErrorCode.FOOD_NOT_FOUND,
+                    "Không tìm thấy món ăn nào được duyệt"
+            );
         }
 
         String prompt = buildPrompt(

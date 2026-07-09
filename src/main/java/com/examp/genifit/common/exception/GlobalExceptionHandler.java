@@ -52,7 +52,7 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
                 .status(ex.getErrorCode().getStatus())
-                .body(buildResponse(ex.getMessage(), error));
+                .body(buildResponse("Yêu cầu thất bại", error));
     }
 
     /* @Valid request body */

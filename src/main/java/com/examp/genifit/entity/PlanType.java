@@ -3,6 +3,7 @@ package com.examp.genifit.entity;
 public enum PlanType {
     FREE,
     TRIAL_PREMIUM,
+    PREMIUM,
     STUDENT,
     FAMILY,
     FITNESS,

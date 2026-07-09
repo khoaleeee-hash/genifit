@@ -24,6 +24,7 @@ import lombok.experimental.FieldDefaults;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import com.examp.genifit.dto.response.CancelSubscriptionResponse;
 
 import java.time.Instant;
 import java.util.List;
@@ -158,12 +159,12 @@ public class UserController {
             summary = "Cancel current subscription"
     )
     @PatchMapping("/cancel-my-subscription")
-    public ApiResponse<String> cancelMySubscription() {
-        userService.cancelMySubscription();
+    public ApiResponse<CancelSubscriptionResponse> cancelMySubscription() {
+        CancelSubscriptionResponse response = userService.cancelMySubscription();
 
         return ApiResponse.success(
                 "Cancel subscription successfully",
-                "Subscription cancelled successfully"
+                response
         );
     }
 

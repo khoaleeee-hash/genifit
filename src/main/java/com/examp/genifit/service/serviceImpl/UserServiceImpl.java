@@ -7,6 +7,7 @@ import com.examp.genifit.dto.request.AssignSubscriptionRequest;
 import com.examp.genifit.dto.request.CreateUserRequest;
 import com.examp.genifit.dto.request.ResetPasswordRequest;
 import com.examp.genifit.dto.request.UpdateUserProfileRequest;
+import com.examp.genifit.dto.response.CancelSubscriptionResponse;
 import com.examp.genifit.dto.response.UserProfileResponse;
 import com.examp.genifit.dto.response.UserResponse;
 import com.examp.genifit.entity.OtpToken;
@@ -33,6 +34,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.math.RoundingMode;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -137,7 +142,10 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public UserSubscriptionResponse assignSubscription(AssignSubscriptionRequest request) {
         if (request == null || request.getUserId() == null || request.getPlanId() == null) {
-            throw new ApiException(ErrorCode.INVALID_SUBSCRIPTION_REQUEST);
+            throw new ApiException(
+                    ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
+                    "Gói đăng kí này không hợp lệ hoặc không tồn tại"
+            );
         }
 
         User user = userRepository.findById(request.getUserId())
@@ -147,7 +155,10 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new ApiException(ErrorCode.SUBSCRIPTION_PLAN_NOT_FOUND));
 
         if (plan.getActive() == null || !plan.getActive()) {
-            throw new ApiException(ErrorCode.SUBSCRIPTION_PLAN_INACTIVE);
+            throw new ApiException(
+                    ErrorCode.SUBSCRIPTION_PLAN_INACTIVE,
+                    "Gói đăng kí này hiện không còn hoạt động"
+            );
         }
 
         userSubscriptionRepository
@@ -184,13 +195,19 @@ public class UserServiceImpl implements UserService {
                         currentUser,
                         SubscriptionStatus.ACTIVE
                 )
-                .orElseThrow(() -> new ApiException(ErrorCode.ACTIVE_SUBSCRIPTION_NOT_FOUND));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.ACTIVE_SUBSCRIPTION_NOT_FOUND,
+                        "Gói đăng kí này không tồn tại hoặc đã hết hạn"
+                ));
 
         if (subscription.getEndDate().isBefore(LocalDateTime.now())) {
             subscription.setStatus(SubscriptionStatus.EXPIRED);
             userSubscriptionRepository.save(subscription);
 
-            throw new ApiException(ErrorCode.ACTIVE_SUBSCRIPTION_NOT_FOUND);
+            throw new ApiException(
+                    ErrorCode.ACTIVE_SUBSCRIPTION_NOT_FOUND,
+                    "Gói đăng kí này không tồn tại hoặc đã hết hạn"
+            );
         }
 
         return new UserSubscriptionResponse(subscription);
@@ -207,7 +224,8 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public void cancelMySubscription() {
+    @Transactional
+    public CancelSubscriptionResponse cancelMySubscription() {
         User currentUser = getCurrentUser();
 
         UserSubscription subscription = userSubscriptionRepository
@@ -215,31 +233,136 @@ public class UserServiceImpl implements UserService {
                         currentUser,
                         SubscriptionStatus.ACTIVE
                 )
-                .orElseThrow(() -> new ApiException(ErrorCode.ACTIVE_SUBSCRIPTION_NOT_FOUND));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.ACTIVE_SUBSCRIPTION_NOT_FOUND,
+                        "Gói đăng kí này không tồn tại hoặc đã hết hạn"
+                ));
+
+        LocalDateTime now = LocalDateTime.now();
+
+        RefundResult refundResult = calculateRefund(subscription, now);
 
         subscription.setStatus(SubscriptionStatus.CANCELLED);
-        subscription.setCancelledAt(LocalDateTime.now());
+        subscription.setCancelledAt(now);
+        subscription.setAutoRenew(false);
 
-        userSubscriptionRepository.save(subscription);
+        subscription.setRefundStatus(refundResult.refundStatus());
+        subscription.setRefundAmount(refundResult.refundAmount());
+        subscription.setRefundPercent(refundResult.refundPercent());
+        subscription.setRefundReason(refundResult.message());
+
+        if (refundResult.refundStatus() == RefundStatus.PENDING) {
+            subscription.setRefundRequestedAt(now);
+        }
+
+        UserSubscription saved = userSubscriptionRepository.save(subscription);
+
+        return CancelSubscriptionResponse.builder()
+                .subscriptionId(saved.getSubscriptionId())
+                .subscriptionStatus(saved.getStatus().name())
+                .startDate(saved.getStartDate())
+                .endDate(saved.getEndDate())
+                .cancelledAt(saved.getCancelledAt())
+                .usedDays(refundResult.usedDays())
+                .refundEligible(refundResult.refundAmount().compareTo(BigDecimal.ZERO) > 0)
+                .refundStatus(refundResult.refundStatus())
+                .refundPercent(refundResult.refundPercent())
+                .refundAmount(refundResult.refundAmount())
+                .refundMessage(refundResult.message())
+                .build();
+    }
+
+    private RefundResult calculateRefund(
+            UserSubscription subscription,
+            LocalDateTime now
+    ) {
+        if (subscription.getStartDate() == null) {
+            return new RefundResult(
+                    0L,
+                    RefundStatus.NOT_ELIGIBLE,
+                    0,
+                    BigDecimal.ZERO,
+                    "Không đủ điều kiện hoàn tiền vì không có ngày bắt đầu gói"
+            );
+        }
+
+        if (subscription.getSubscriptionPlan() == null
+                || subscription.getSubscriptionPlan().getPrice() == null) {
+            return new RefundResult(
+                    0L,
+                    RefundStatus.NOT_ELIGIBLE,
+                    0,
+                    BigDecimal.ZERO,
+                    "Không đủ điều kiện hoàn tiền vì không có thông tin giá gói"
+            );
+        }
+
+        BigDecimal price = subscription.getSubscriptionPlan().getPrice();
+
+        long usedDays = Duration.between(
+                subscription.getStartDate(),
+                now
+        ).toDays() + 1;
+
+        if (usedDays <= 5) {
+            return new RefundResult(
+                    usedDays,
+                    RefundStatus.PENDING,
+                    100,
+                    price,
+                    "Huỷ trong ngày thứ 1-5: được hoàn 100% giá trị gói. Yêu cầu hoàn tiền đang chờ xử lý."
+            );
+        }
+
+        if (usedDays <= 10) {
+            BigDecimal refundAmount = price
+                    .multiply(BigDecimal.valueOf(0.5))
+                    .setScale(0, RoundingMode.HALF_UP);
+
+            return new RefundResult(
+                    usedDays,
+                    RefundStatus.PENDING,
+                    50,
+                    refundAmount,
+                    "Huỷ trong ngày thứ 6-10: được hoàn 50% giá trị gói. Yêu cầu hoàn tiền đang chờ xử lý."
+            );
+        }
+
+        return new RefundResult(
+                usedDays,
+                RefundStatus.NOT_ELIGIBLE,
+                0,
+                BigDecimal.ZERO,
+                "Huỷ sau ngày thứ 10: không đủ điều kiện hoàn tiền"
+        );
     }
 
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
         if (authentication == null || !authentication.isAuthenticated()) {
-            throw new ApiException(ErrorCode.UNAUTHENTICATED);
+            throw new ApiException(
+                    ErrorCode.UNAUTHENTICATED,
+                    "Người dùng chưa đăng nhập"
+            );
         }
 
         Object principal = authentication.getPrincipal();
 
         if (principal == null || principal.equals("anonymousUser")) {
-            throw new ApiException(ErrorCode.UNAUTHENTICATED);
+            throw new ApiException(
+                    ErrorCode.UNAUTHENTICATED,
+                    "Người dùng chưa đăng nhập"
+            );
         }
 
         String username = authentication.getName();
 
         return userRepository.findByUsernameAndIsActiveTrue(username)
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.USER_NOT_FOUND,
+                        "Không tìm thấy người dùng"
+                ));
     }
 
     @Override
@@ -249,7 +372,10 @@ public class UserServiceImpl implements UserService {
         String currentUsername = context.getAuthentication().getName();
 
         User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.USER_NOT_FOUND,
+                        "Không tìm thấy người dùng"
+                ));
 
         user.setIsActive(false);
         userRepository.save(user);
@@ -259,7 +385,10 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void generateAndSendOtpForForgotPassword(String email) {
         if (!userRepository.existsByEmailAndIsActiveTrue(email)) {
-            throw new ApiException(ErrorCode.USER_NOT_FOUND);
+            throw new ApiException(
+                    ErrorCode.USER_NOT_FOUND,
+                    "Không tìm thấy người dùng"
+            );
         }
 
         otpTokenRepository.deleteByEmail(email);
@@ -279,13 +408,22 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
         User user = userRepository.findByEmailAndIsActiveTrue(request.getEmail())
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.USER_NOT_FOUND,
+                        "Không tìm thấy người dùng"
+                ));
 
         OtpToken validOtp = otpTokenRepository.findByEmailAndOtpCode(request.getEmail(), request.getOtpCode())
-                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_OTP));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.INVALID_OTP,
+                        "Mã OTP không hợp lệ"
+                ));
 
         if (validOtp.getExpiryTime().isBefore(LocalDateTime.now())) {
-            throw new ApiException(ErrorCode.OTP_EXPIRED);
+            throw new ApiException(
+                    ErrorCode.OTP_EXPIRED,
+                    "Mã OTP đã hết hạn"
+            );
         }
 
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
@@ -302,7 +440,10 @@ public class UserServiceImpl implements UserService {
     @Override
     public UserResponse getUser(Integer id) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.USER_NOT_FOUND,
+                        "Không tìm thấy người dùng"
+                ));
 
         return userMapper.toUserResponse(user);
     }
@@ -317,7 +458,10 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void deleteUserById(Integer id) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.USER_NOT_FOUND,
+                        "Không tìm thấy người dùng"
+                ));
 
         user.setIsActive(false);
         userRepository.save(user);
@@ -330,7 +474,10 @@ public class UserServiceImpl implements UserService {
         String currentUsername = context.getAuthentication().getName();
 
         User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.USER_NOT_FOUND,
+                        "Không tìm thấy người dùng"
+                ));
 
         UserProfile profile = userProfileRepository.findByUser(user)
                 .orElse(new UserProfile());
@@ -378,5 +525,14 @@ public class UserServiceImpl implements UserService {
         userProfileRepository.save(profile);
 
         return userMapper.toUserProfileResponse(profile);
+    }
+
+    private record RefundResult(
+            Long usedDays,
+            RefundStatus refundStatus,
+            Integer refundPercent,
+            BigDecimal refundAmount,
+            String message
+    ) {
     }
 }

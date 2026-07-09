@@ -1,5 +1,7 @@
 package com.examp.genifit.service.serviceImpl;
 
+import com.examp.genifit.common.exception.ApiException;
+import com.examp.genifit.common.exception.ErrorCode;
 import com.examp.genifit.dto.request.CreateSubscriptionPlanRequest;
 import com.examp.genifit.dto.request.SubscribePlanRequest;
 import com.examp.genifit.dto.request.UpdateSubscriptionPlanRequest;
@@ -22,6 +24,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -54,7 +57,10 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
     @Override
     public SubscriptionPlanResponse getPlanById(Integer planId) {
         SubscriptionPlan plan = subscriptionPlanRepository.findByPlanIdAndDeletedFalse(planId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy gói đăng ký"));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.SUBSCRIPTION_PLAN_NOT_FOUND,
+                        "Không tìm thấy gói đăng ký"
+                ));
 
         return new SubscriptionPlanResponse(plan);
     }
@@ -62,11 +68,17 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
     @Override
     public MySubscriptionResponse getMySubscription(String username) {
         User user = userRepository.findByUsernameAndIsActiveTrue(username)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng"));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.USER_NOT_FOUND,
+                        "Không tìm thấy người dùng"
+                        ));
 
         UserSubscription userSubscription = userSubscriptionRepository
                 .findByUserUserIdAndStatus(user.getUserId(), SubscriptionStatus.ACTIVE)
-                .orElseThrow(() -> new RuntimeException("Người dùng chưa có gói đăng ký đang hoạt động"));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.ACTIVE_SUBSCRIPTION_NOT_FOUND,
+                        "Người dùng chưa có gói đăng ký hoạt động"
+                        ));
 
         return new MySubscriptionResponse(userSubscription);
     }
@@ -76,7 +88,10 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
         validateCreateRequest(request);
 
         if (subscriptionPlanRepository.existsByPlanTypeAndDeletedFalse(request.getPlanType())) {
-            throw new RuntimeException("Plan type này đã tồn tại");
+            throw new ApiException(
+                    ErrorCode.SUBSCRIPTION_PLAN_EXISTED,
+                    "Gói đăng ký này đã tồn tại"
+            );
         }
 
         SubscriptionPlan plan = SubscriptionPlan.builder()
@@ -122,31 +137,72 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
             SubscribePlanRequest request
     ) {
         User user = userRepository.findByUsernameAndIsActiveTrue(username)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy user đang đăng nhập"));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.USER_NOT_FOUND,
+                        "Không tìm thấy người dùng đăng nhập"
+                ));
 
         SubscriptionPlan plan = subscriptionPlanRepository.findById(request.getPlanId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy gói đăng kí"));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.SUBSCRIPTION_PLAN_NOT_FOUND,
+                        "Không tìm thấy gói đăng kí"
+                ));
 
         if (Boolean.FALSE.equals(plan.getActive())) {
-            throw new RuntimeException("Gói đăng kí này hiện không còn hoạt động");
+            throw new ApiException(
+                    ErrorCode.SUBSCRIPTION_PLAN_INACTIVE,
+                    "Gói đăng kí này hiện không còn hoạt động"
+            );
         }
 
         if (Boolean.TRUE.equals(plan.getDeleted())) {
-            throw new RuntimeException("Gói đăng kí này đã bị xoá");
+            throw new ApiException(
+                    ErrorCode.SUBSCRIPTION_PLAN_NOT_FOUND,
+                    "Gói đăng kí này đã bị xoá"
+            );
         }
 
         if (plan.getDurationDays() == null || plan.getDurationDays() <= 0) {
-            throw new RuntimeException("Thời hạn gói đăng kí không hợp lệ");
+            throw new ApiException(
+                    ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
+                    "Thời hạn gói đăng kí không hợp lệ"
+            );
         }
 
-        userSubscriptionRepository
-                .findFirstByUserAndStatusOrderByEndDateDesc(user, SubscriptionStatus.ACTIVE)
-                .ifPresent(currentSubscription -> {
-                    currentSubscription.setStatus(SubscriptionStatus.CANCELLED);
-                    currentSubscription.setCancelledAt(LocalDateTime.now());
-                    currentSubscription.setAutoRenew(false);
-                    userSubscriptionRepository.save(currentSubscription);
-                });
+        LocalDateTime now = LocalDateTime.now();
+
+        Optional<UserSubscription> currentActiveOpt  = userSubscriptionRepository
+                .findFirstByUserAndStatusOrderByEndDateDesc(
+                        user,
+                        SubscriptionStatus.ACTIVE);
+
+        if(currentActiveOpt.isPresent()) {
+            UserSubscription currentSubscription = currentActiveOpt.get();
+
+            boolean samePlan = currentSubscription
+                    .getSubscriptionPlan()
+                    .getPlanId()
+                    .equals(request.getPlanId());
+
+            if (!samePlan) {
+                throw new ApiException(
+                        ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
+                        "Bạn đã có gói đăng ký hoạt động, vui lòng huỷ gói hiện tại trước khi đăng ký gói mới"
+                );
+            }
+
+            LocalDateTime baseDate = currentSubscription.getEndDate() != null
+                    && currentSubscription.getEndDate().isAfter(now)
+                    ? currentSubscription.getEndDate()
+                    : now;
+
+            currentSubscription.setEndDate(baseDate.plusDays(plan.getDurationDays()));
+            currentSubscription.setAutoRenew(false);
+
+            UserSubscription saved = userSubscriptionRepository.save(currentSubscription);
+
+            return new UserSubscriptionResponse(saved);
+        }
 
         LocalDateTime startDate = LocalDateTime.now();
         LocalDateTime endDate = startDate.plusDays(plan.getDurationDays());
@@ -169,11 +225,16 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
     @Override
     public SubscriptionPlanResponse updatePlan(Integer planId, UpdateSubscriptionPlanRequest request) {
         SubscriptionPlan plan = subscriptionPlanRepository.findByPlanIdAndDeletedFalse(planId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy gói đăng ký"));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.SUBSCRIPTION_PLAN_NOT_FOUND,
+                        "Không tìm thấy gói đăng ký"));
 
         if (request.getPlanType() != null && !request.getPlanType().equals(plan.getPlanType())) {
             if (subscriptionPlanRepository.existsByPlanTypeAndDeletedFalse(request.getPlanType())) {
-                throw new RuntimeException("Plan type này đã tồn tại");
+                throw new ApiException(
+                        ErrorCode.SUBSCRIPTION_PLAN_EXISTED,
+                        "Loại gói đăng ký này đã tồn tại"
+                );
             }
             plan.setPlanType(request.getPlanType());
         }
@@ -270,7 +331,10 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
     @Override
     public void deletePlan(Integer planId) {
         SubscriptionPlan plan = subscriptionPlanRepository.findByPlanIdAndDeletedFalse(planId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy gói đăng ký"));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.SUBSCRIPTION_PLAN_NOT_FOUND,
+                        "Không tìm thấy gói đăng ký"
+                ));
 
         plan.setDeleted(true);
         plan.setActive(false);
@@ -279,11 +343,11 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
     }
 
     private Pageable buildPageable(Integer pageNum, Integer pageSize) {
-        if (pageNum == null || pageNum < 0) {
+        if (pageNum == null || pageNum < 1) {
             pageNum = 1;
         }
 
-        if (pageSize == null || pageSize <= 0) {
+        if (pageSize == null || pageSize < 1) {
             pageSize = 10;
         }
 
@@ -300,23 +364,38 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
 
     private void validateCreateRequest(CreateSubscriptionPlanRequest request) {
         if (request == null) {
-            throw new RuntimeException("Request không được để trống");
+            throw new ApiException(
+                    ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
+                    "Request không được để trống"
+            );
         }
 
         if (request.getPlanType() == null) {
-            throw new RuntimeException("planType không được để trống");
+            throw new ApiException(
+                    ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
+                    "planType không được để trống"
+            );
         }
 
         if (request.getPlanName() == null || request.getPlanName().trim().isEmpty()) {
-            throw new RuntimeException("planName không được để trống");
+            throw new ApiException(
+                    ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
+                    "planName không được để trống"
+            );
         }
 
         if (request.getPrice() != null && request.getPrice().compareTo(BigDecimal.ZERO) < 0) {
-            throw new RuntimeException("price không được nhỏ hơn 0");
+            throw new ApiException(
+                    ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
+                    "price không được nhỏ hơn 0"
+            );
         }
 
         if (request.getDurationDays() != null && request.getDurationDays() <= 0) {
-            throw new RuntimeException("durationDays phải lớn hơn 0");
+            throw new ApiException(
+                    ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
+                    "durationDays phải lớn hơn 0"
+            );
         }
     }
 
