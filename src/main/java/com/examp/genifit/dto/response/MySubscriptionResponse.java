@@ -1,6 +1,5 @@
 package com.examp.genifit.dto.response;
 
-import com.examp.genifit.entity.UserSubscription;
 import lombok.*;
 
 import java.time.LocalDateTime;
@@ -30,7 +29,9 @@ public class MySubscriptionResponse {
 
     private LocalDateTime endDate;
 
-    private Integer aiScanLimitPerMonth;
+    private Integer maxAiScansPerDay;
+
+    private Integer maxHistoryViewDays;
 
     private Integer mealSuggestionLimitPerMonth;
 

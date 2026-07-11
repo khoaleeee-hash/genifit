@@ -1,14 +1,14 @@
 package com.examp.genifit.service.serviceImpl;
 
+import com.examp.genifit.common.exception.ApiException;
+import com.examp.genifit.common.exception.ErrorCode;
 import com.examp.genifit.dto.response.DetectedFoodItemResponse;
 import com.examp.genifit.dto.response.GeminiFoodScanResponse;
-import com.examp.genifit.entity.AIScanHistory;
-import com.examp.genifit.entity.Guest;
-import com.examp.genifit.entity.SuitabilityStatus;
-import com.examp.genifit.entity.User;
+import com.examp.genifit.entity.*;
 import com.examp.genifit.repository.AIScanHistoryRepository;
 import com.examp.genifit.repository.GuestRepository;
 import com.examp.genifit.repository.UserRepository;
+import com.examp.genifit.repository.UserSubscriptionRepository;
 import com.examp.genifit.service.GeminiFoodScanService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,6 +21,8 @@ import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -34,6 +36,7 @@ public class GeminiFoodScanServiceImpl implements GeminiFoodScanService {
     private final UserRepository userRepository;
     private final GuestRepository guestRepository;
     private final AIScanHistoryRepository aiScanHistoryRepository;
+    private final UserSubscriptionRepository userSubscriptionRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -51,6 +54,7 @@ public class GeminiFoodScanServiceImpl implements GeminiFoodScanService {
     public GeminiFoodScanResponse scanFoodImage(MultipartFile image, Integer userId, Integer guestId) {
         validateUserOrGuest(userId, guestId);
         validateImage(image);
+        checkScanLimit(userId, guestId);
 
         try {
             String base64Image = Base64.getEncoder().encodeToString(image.getBytes());
@@ -123,6 +127,35 @@ public class GeminiFoodScanServiceImpl implements GeminiFoodScanService {
 
         } catch (Exception e) {
             throw new RuntimeException("Lỗi khi scan món ăn bằng Gemini: " + e.getMessage());
+        }
+    }
+
+    private void checkScanLimit(Integer userId, Integer guestId) {
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+
+        if (userId != null) {
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+
+            UserSubscription activeSub = userSubscriptionRepository
+                    .findFirstByUserAndStatusOrderByEndDateDesc(user, SubscriptionStatus.ACTIVE)
+                    .orElseThrow(() -> new ApiException(ErrorCode.ACTIVE_SUBSCRIPTION_NOT_FOUND, "Bạn chưa có gói đăng ký nào. Vui lòng chọn một gói để sử dụng."));
+
+            int maxScans = activeSub.getSubscriptionPlan().getMaxAiScansPerDay();
+
+            long scansToday = aiScanHistoryRepository.countByUser_UserIdAndCreatedAtGreaterThanEqual(userId, startOfDay);
+
+            if (scansToday >= maxScans) {
+                throw new ApiException(ErrorCode.VALIDATION_ERROR, "Bạn đã hết lượt Scan AI hôm nay (" + maxScans + " lượt). Vui lòng nâng cấp gói Premium để sử dụng vô hạn!");
+            }
+
+        } else if (guestId != null) {
+            int guestMaxScans = 3;
+            long scansToday = aiScanHistoryRepository.countByGuest_GuestIdAndCreatedAtGreaterThanEqual(guestId, startOfDay);
+
+            if (scansToday >= guestMaxScans) {
+                throw new ApiException(ErrorCode.VALIDATION_ERROR, "Tài khoản Khách đã hết " + guestMaxScans + " lượt Scan hôm nay. Vui lòng đăng ký tài khoản để sử dụng tiếp!");
+            }
         }
     }
 

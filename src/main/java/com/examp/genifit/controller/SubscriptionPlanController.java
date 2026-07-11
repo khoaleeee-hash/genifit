@@ -8,20 +8,14 @@ import com.examp.genifit.dto.response.*;
 import com.examp.genifit.service.SubscriptionPlanService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.ExampleObject;
-import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.List;
 
 @RestController
@@ -147,9 +141,9 @@ public class SubscriptionPlanController {
     @SecurityRequirement(name = "bearerAuth")
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<MySubscriptionResponse>> getMySubscription(
-            @AuthenticationPrincipal UserDetails userDetails
+            Principal principal // ĐÃ SỬA
     ) {
-        MySubscriptionResponse response = subscriptionPlanService.getMySubscription(userDetails.getUsername());
+        MySubscriptionResponse response = subscriptionPlanService.getMySubscription(principal.getName());
         return ResponseEntity.ok(ApiResponse.success("Lấy gói đăng ký thành công", response));
     }
 
@@ -195,7 +189,7 @@ public class SubscriptionPlanController {
                       "message": "Vui lòng thanh toán để hoàn tất đăng ký",
                       "data": {
                         "requiresPayment": true,
-                        "paymentUrl": "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=...",
+                        "paymentUrl": "[https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=](https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=)...",
                         "subscription": null
                       }
                     }
@@ -212,11 +206,11 @@ public class SubscriptionPlanController {
     @SecurityRequirement(name = "bearerAuth")
     @PostMapping("/subscribe")
     public ResponseEntity<ApiResponse<SubscribePlanResponse>> subscribePlan(
-            @AuthenticationPrincipal UserDetails userDetails,
+            Principal principal, // ĐÃ SỬA
             @RequestBody SubscribePlanRequest request
     ) {
         SubscribePlanResponse response = subscriptionPlanService.subscribePlan(
-                userDetails.getUsername(), request
+                principal.getName(), request
         );
 
         String message = response.isRequiresPayment()
@@ -229,9 +223,11 @@ public class SubscriptionPlanController {
     @Operation(summary = "Hủy gói đăng ký đang active (có tính hoàn tiền)")
     @SecurityRequirement(name = "bearerAuth")
     @PostMapping("/cancel")
-    public ResponseEntity<ApiResponse<CancelSubscriptionResponse>> cancelSubscription(@AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<ApiResponse<CancelSubscriptionResponse>> cancelSubscription(
+            Principal principal // ĐÃ SỬA
+    ) {
         CancelSubscriptionResponse response = subscriptionPlanService.cancelSubscription(
-                userDetails.getUsername()
+                principal.getName()
         );
         return ResponseEntity.ok(ApiResponse.success("Hủy gói thành công", response));
     }
@@ -253,10 +249,10 @@ public class SubscriptionPlanController {
     @SecurityRequirement(name = "bearerAuth")
     @PostMapping("/renew")
     public ResponseEntity<ApiResponse<SubscribePlanResponse>> renewSubscription(
-            @AuthenticationPrincipal UserDetails userDetails
+            Principal principal
     ) {
         SubscribePlanResponse response = subscriptionPlanService.renewSubscription(
-                userDetails.getUsername()
+                principal.getName()
         );
 
         String message = response.isRequiresPayment()
@@ -270,10 +266,10 @@ public class SubscriptionPlanController {
     @SecurityRequirement(name = "bearerAuth")
     @GetMapping("/history")
     public ResponseEntity<ApiResponse<List<UserSubscriptionResponse>>> getMySubscriptionHistory(
-            @AuthenticationPrincipal UserDetails userDetails
+            Principal principal
     ) {
         List<UserSubscriptionResponse> response =
-                subscriptionPlanService.getMySubscriptionHistory(userDetails.getUsername());
+                subscriptionPlanService.getMySubscriptionHistory(principal.getName());
         return ResponseEntity.ok(ApiResponse.success("Lấy lịch sử gói đăng ký thành công", response));
     }
 }
