@@ -27,19 +27,62 @@ public class FoodEvaluationController {
     private final FoodEvaluationService foodEvaluationService;
     private final UserRepository userRepository;
 
+//    @PostMapping(
+//            value = "/scan-and-evaluate",
+//            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+//    )
+//    public FoodEvaluationResponse scanAndEvaluate(
+//            @Parameter(
+//                    description = "Food image file",
+//                    required = true,
+//                    schema = @Schema(type = "string", format = "binary")
+//            )
+//            @RequestParam("image") MultipartFile image,
+//            @RequestParam(required = false) Integer guestId
+//    ) {
+//        Integer userId = getCurrentUserIdOrNull();
+//
+//        if (userId == null && guestId == null) {
+//            throw new RuntimeException("Please login or provide guestId");
+//        }
+//
+//        if (userId != null) {
+//            guestId = null;
+//        }
+//
+//        GeminiFoodScanResponse scanResponse = geminiFoodScanService.scanFoodImage(
+//                image,
+//                userId,
+//                guestId
+//        );
+//
+//        FoodEvaluationRequest evaluationRequest = new FoodEvaluationRequest();
+//        evaluationRequest.setUserId(userId);
+//        evaluationRequest.setGuestId(guestId);
+//        evaluationRequest.setFoods(scanResponse.getFoods());
+//        evaluationRequest.setTotalCalories(scanResponse.getTotalCalories());
+//        evaluationRequest.setTotalProtein(scanResponse.getTotalProtein());
+//        evaluationRequest.setTotalCarbs(scanResponse.getTotalCarbs());
+//        evaluationRequest.setTotalFat(scanResponse.getTotalFat());
+//        evaluationRequest.setConfidence(scanResponse.getConfidence());
+//        evaluationRequest.setSource(scanResponse.getSource());
+//        evaluationRequest.setNote(scanResponse.getNote());
+//
+//        return foodEvaluationService.evaluateScannedFood(evaluationRequest);
+//    }
     @PostMapping(
             value = "/scan-and-evaluate",
-            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE
     )
     public FoodEvaluationResponse scanAndEvaluate(
-            @Parameter(
-                    description = "Food image file",
-                    required = true,
-                    schema = @Schema(type = "string", format = "binary")
-            )
-            @RequestParam("image") MultipartFile image,
-            @RequestParam(required = false) Integer guestId
+            @RequestPart("image") MultipartFile image,
+            @RequestParam(name = "guestId", required = false) Integer guestId
     ) {
+        if (image == null || image.isEmpty()) {
+            throw new RuntimeException("Image file is required");
+        }
+
         Integer userId = getCurrentUserIdOrNull();
 
         if (userId == null && guestId == null) {
@@ -50,11 +93,8 @@ public class FoodEvaluationController {
             guestId = null;
         }
 
-        GeminiFoodScanResponse scanResponse = geminiFoodScanService.scanFoodImage(
-                image,
-                userId,
-                guestId
-        );
+        GeminiFoodScanResponse scanResponse =
+                geminiFoodScanService.scanFoodImage(image, userId, guestId);
 
         FoodEvaluationRequest evaluationRequest = new FoodEvaluationRequest();
         evaluationRequest.setUserId(userId);
