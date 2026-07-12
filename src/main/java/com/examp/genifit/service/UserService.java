@@ -28,8 +28,5 @@ public interface UserService {
     UserProfileResponse updateMyProfile(UpdateUserProfileRequest request);
 
     UserSubscriptionResponse assignSubscription(AssignSubscriptionRequest request);
-    UserSubscriptionResponse getMyActiveSubscription();
-    List<UserSubscriptionResponse> getMySubscriptionHistory();
-    CancelSubscriptionResponse cancelMySubscription();;
 
 }

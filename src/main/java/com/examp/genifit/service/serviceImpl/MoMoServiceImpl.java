@@ -1,5 +1,7 @@
 package com.examp.genifit.service.serviceImpl;
 
+import com.examp.genifit.common.exception.ApiException;
+import com.examp.genifit.common.exception.ErrorCode;
 import com.examp.genifit.dto.response.MoMoRefundResponse;
 import com.examp.genifit.entity.*;
 import com.examp.genifit.repository.PaymentTransactionRepository;
@@ -16,7 +18,6 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -70,7 +71,6 @@ public class MoMoServiceImpl implements MoMoService {
 
         String signature = hmacSHA256(rawSignature, secretKey);
 
-
         // 2. Build request body
         Map<String, Object> requestBody = new LinkedHashMap<>();
         requestBody.put("partnerCode", partnerCode);
@@ -105,14 +105,20 @@ public class MoMoServiceImpl implements MoMoService {
                 .onStatus(status -> status.is4xxClientError(), clientResponse ->
                         clientResponse.bodyToMono(String.class)
                                 .doOnNext(body -> System.out.println("MoMo error response: " + body))
-                                .map(body -> new RuntimeException("MoMo 400: " + body))
+                                .map(body -> new ApiException(
+                                        ErrorCode.PAYMENT_GATEWAY_ERROR,
+                                        "MoMo trả về lỗi 400: " + body
+                                ))
                 )
                 .bodyToMono(Map.class)
                 .block();
 
         String payUrl = (String) response.get("payUrl");
         if (payUrl == null) {
-            throw new RuntimeException("Không thể tạo link thanh toán MoMo");
+            throw new ApiException(
+                    ErrorCode.PAYMENT_GATEWAY_ERROR,
+                    "Không thể tạo link thanh toán MoMo"
+            );
         }
 
         return payUrl;
@@ -127,12 +133,18 @@ public class MoMoServiceImpl implements MoMoService {
 
         // 1. Verify signature để chắc chắn request đến từ MoMo, không phải giả mạo
         if (!verifySignature(ipnData)) {
-            throw new RuntimeException("Invalid MoMo signature");
+            throw new ApiException(
+                    ErrorCode.INVALID_PAYMENT_SIGNATURE,
+                    "Chữ ký MoMo không hợp lệ"
+            );
         }
 
         // 2. Tìm transaction trong DB
         PaymentTransaction transaction = transactionRepository.findByOrderCode(orderCode)
-                .orElseThrow(() -> new RuntimeException("Transaction not found: " + orderCode));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.PAYMENT_TRANSACTION_NOT_FOUND,
+                        "Không tìm thấy giao dịch: " + orderCode
+                ));
 
         // 3. Cập nhật transaction
         transaction.setGatewayTransactionId(gatewayTransactionId);
@@ -157,13 +169,12 @@ public class MoMoServiceImpl implements MoMoService {
         User user = transaction.getUser();
         SubscriptionPlan plan = transaction.getPlan();
 
-        // Kiểm tra đã có subscription chưa
-        UserSubscription subscription = subscriptionRepository.findByUser(user)
+        UserSubscription subscription = subscriptionRepository
+                .findFirstByUserOrderByCreatedAtDesc(user)
                 .orElse(new UserSubscription());
 
         LocalDateTime startDate = LocalDateTime.now();
 
-        // Nếu đang còn hạn thì cộng thêm, không tính lại từ đầu
         if (subscription.getEndDate() != null && subscription.getEndDate().isAfter(startDate)) {
             startDate = subscription.getEndDate();
         }
@@ -310,7 +321,10 @@ public class MoMoServiceImpl implements MoMoService {
             }
             return hex.toString();
         } catch (Exception e) {
-            throw new RuntimeException("HMAC-SHA256 error", e);
+            throw new ApiException(
+                    ErrorCode.INTERNAL_ERROR,
+                    "Lỗi tính toán chữ ký HMAC-SHA256"
+            );
         }
     }
 }

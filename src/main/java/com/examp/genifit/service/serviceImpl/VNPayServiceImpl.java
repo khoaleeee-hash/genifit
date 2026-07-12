@@ -1,5 +1,7 @@
 package com.examp.genifit.service.serviceImpl;
 
+import com.examp.genifit.common.exception.ApiException;
+import com.examp.genifit.common.exception.ErrorCode;
 import com.examp.genifit.entity.*;
 import com.examp.genifit.repository.PaymentTransactionRepository;
 import com.examp.genifit.repository.UserSubscriptionRepository;
@@ -11,7 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
-import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -46,7 +47,7 @@ public class VNPayServiceImpl implements VNPayService {
     @Override
     public String createPayment(User user, SubscriptionPlan plan, String orderCode) {
 
-        long amount = plan.getPrice().longValue()*100;
+        long amount = plan.getPrice().longValue() * 100;
         String orderInfo = "ThanhToan-" + plan.getPlanName().replaceAll("\\s+", "") + "-GENEFIT";
 
         // 1. Build params — VNPay yêu cầu sort theo alphabet trước khi ký
@@ -84,7 +85,10 @@ public class VNPayServiceImpl implements VNPayService {
     public void handleIPN(Map<String, String> ipnData) {
         // 1. Verify signature
         if (!verifySignature(ipnData)) {
-            throw new RuntimeException("Invalid VNPay signature");
+            throw new ApiException(
+                    ErrorCode.INVALID_PAYMENT_SIGNATURE,
+                    "Chữ ký VNPay không hợp lệ"
+            );
         }
 
         String orderCode = ipnData.get("vnp_TxnRef");
@@ -93,7 +97,10 @@ public class VNPayServiceImpl implements VNPayService {
 
         // 2. Tìm transaction
         PaymentTransaction transaction = transactionRepository.findByOrderCode(orderCode)
-                .orElseThrow(() -> new RuntimeException("Transaction not found: " + orderCode));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.PAYMENT_TRANSACTION_NOT_FOUND,
+                        "Không tìm thấy giao dịch: " + orderCode
+                ));
 
         transaction.setGatewayTransactionId(gatewayTransactionId);
         transaction.setGatewayResponse(ipnData.toString());
@@ -128,7 +135,8 @@ public class VNPayServiceImpl implements VNPayService {
         User user = transaction.getUser();
         SubscriptionPlan plan = transaction.getPlan();
 
-        UserSubscription subscription = subscriptionRepository.findByUser(user)
+        UserSubscription subscription = subscriptionRepository
+                .findFirstByUserOrderByCreatedAtDesc(user)
                 .orElse(new UserSubscription());
 
         LocalDateTime startDate = LocalDateTime.now();
@@ -151,8 +159,6 @@ public class VNPayServiceImpl implements VNPayService {
         subscriptionRepository.save(subscription);
     }
 
-
-
     // VNPay dùng HMAC-SHA512, khác MoMo dùng SHA256
     private String hmacSHA512(String data, String key) {
         try {
@@ -165,7 +171,10 @@ public class VNPayServiceImpl implements VNPayService {
             }
             return hex.toString();
         } catch (Exception e) {
-            throw new RuntimeException("HMAC-SHA512 error", e);
+            throw new ApiException(
+                    ErrorCode.INTERNAL_ERROR,
+                    "Lỗi tính toán chữ ký HMAC-SHA512"
+            );
         }
     }
 
