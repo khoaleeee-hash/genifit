@@ -182,8 +182,21 @@ public class UserServiceImpl implements UserService {
 
         UserSubscription savedSubscription = userSubscriptionRepository.save(subscription);
 
-        return new UserSubscriptionResponse(savedSubscription);
-    }
+        return UserSubscriptionResponse.builder()
+                .subscriptionId(savedSubscription.getSubscriptionId())
+                .userId(savedSubscription.getUser().getUserId())
+                .username(savedSubscription.getUser().getUsername())
+                .planId(savedSubscription.getSubscriptionPlan().getPlanId())
+                .planType(savedSubscription.getSubscriptionPlan().getPlanType())
+                .planName(savedSubscription.getSubscriptionPlan().getPlanName())
+                .startDate(savedSubscription.getStartDate())
+                .endDate(savedSubscription.getEndDate())
+                .status(savedSubscription.getStatus())
+                .autoRenew(savedSubscription.getAutoRenew())
+                .cancelledAt(savedSubscription.getCancelledAt())
+                .createdAt(savedSubscription.getCreatedAt())
+                .updatedAt(savedSubscription.getUpdatedAt())
+                .build();    }
 
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();

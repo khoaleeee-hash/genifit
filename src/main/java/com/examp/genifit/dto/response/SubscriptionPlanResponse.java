@@ -18,7 +18,8 @@ import java.math.BigDecimal;
         "description",
         "price",
         "durationDays",
-        "aiScanLimitPerMonth",
+        "maxAiScansPerDay",
+        "maxHistoryViewDays",
         "mealSuggestionLimitPerMonth",
         "reminderLimit",
         "maxMembers",
@@ -45,7 +46,8 @@ public class SubscriptionPlanResponse {
     private BigDecimal price;
     private Integer durationDays;
 
-    private Integer aiScanLimitPerMonth;
+    private Integer maxAiScansPerDay;
+    private Integer maxHistoryViewDays;
     private Integer mealSuggestionLimitPerMonth;
     private Integer reminderLimit;
 

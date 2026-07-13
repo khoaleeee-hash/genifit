@@ -2,13 +2,11 @@ package com.examp.genifit.service.serviceImpl;
 
 import com.examp.genifit.dto.response.DetectedFoodItemResponse;
 import com.examp.genifit.dto.response.GeminiFoodScanResponse;
-import com.examp.genifit.entity.AIScanHistory;
-import com.examp.genifit.entity.Guest;
-import com.examp.genifit.entity.SuitabilityStatus;
-import com.examp.genifit.entity.User;
+import com.examp.genifit.entity.*;
 import com.examp.genifit.repository.AIScanHistoryRepository;
 import com.examp.genifit.repository.GuestRepository;
 import com.examp.genifit.repository.UserRepository;
+import com.examp.genifit.repository.UserSubscriptionRepository;
 import com.examp.genifit.service.GeminiFoodScanService;
 import com.examp.genifit.service.prompt.FoodScanPrompt;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +36,7 @@ public class GeminiFoodScanServiceImpl
 
     private final UserRepository userRepository;
     private final GuestRepository guestRepository;
+    private final UserSubscriptionRepository userSubscriptionRepository;
     private final AIScanHistoryRepository aiScanHistoryRepository;
 
     private final ObjectMapper objectMapper;
@@ -58,6 +57,7 @@ public class GeminiFoodScanServiceImpl
     ) {
         validateUserOrGuest(userId, guestId);
         validateImage(image);
+        checkScanLimit(userId, guestId);
 
         try {
             log.info(
@@ -897,5 +897,30 @@ public class GeminiFoodScanServiceImpl
         }
 
         return message;
+    }
+
+    private void checkScanLimit(Integer userId, Integer guestId) {
+        java.time.LocalDateTime startOfDay = java.time.LocalDate.now().atStartOfDay();
+        if (userId != null) {
+            UserSubscription activeSub = userSubscriptionRepository
+                    .findByUserUserIdAndStatus(userId, SubscriptionStatus.ACTIVE)
+                    .orElseThrow(() -> new RuntimeException("Bạn chưa có gói đăng ký nào đang kích hoạt."));
+            int maxUserLimit = activeSub.getSubscriptionPlan().getMaxAiScansPerDay();
+            long scannedToday = aiScanHistoryRepository
+                    .countByUser_UserIdAndCreatedAtGreaterThanEqual(userId, startOfDay);
+            if (scannedToday >= maxUserLimit) {
+                throw new RuntimeException("Bạn đã hết " + maxUserLimit + " lượt scan miễn phí của gói "
+                        + activeSub.getSubscriptionPlan().getPlanName() + " trong hôm nay. Vui lòng nâng cấp gói!");
+            }
+
+        } else if (guestId != null) {
+            int maxGuestLimit = 3;
+            long scannedToday = aiScanHistoryRepository
+                    .countByGuest_GuestIdAndCreatedAtGreaterThanEqual(guestId, startOfDay);
+            if (scannedToday >= maxGuestLimit) {
+                throw new RuntimeException("Khách vãng lai chỉ được scan tối đa " + maxGuestLimit
+                        + " lần/ngày. Vui lòng đăng nhập để sử dụng thêm!");
+            }
+        }
     }
 }

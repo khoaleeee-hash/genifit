@@ -35,7 +35,8 @@ public interface UserSubscriptionMapper {
 
     @Mapping(target = "status", expression = "java(entity.getStatus().name())")
 
-    @Mapping(target = "aiScanLimitPerMonth", source = "subscriptionPlan.aiScanLimitPerMonth")
+    @Mapping(target = "maxAiScansPerDay", source = "subscriptionPlan.maxAiScansPerDay")
+    @Mapping(target = "maxHistoryViewDays", source = "subscriptionPlan.maxHistoryViewDays")
     @Mapping(target = "mealSuggestionLimitPerMonth", source = "subscriptionPlan.mealSuggestionLimitPerMonth")
     @Mapping(target = "reminderLimit", source = "subscriptionPlan.reminderLimit")
 
