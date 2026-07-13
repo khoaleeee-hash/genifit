@@ -1,5 +1,6 @@
 package com.examp.genifit.controller;
 
+import com.examp.genifit.common.response.ApiResponse;
 import com.examp.genifit.dto.request.FoodEvaluationRequest;
 import com.examp.genifit.dto.response.FoodEvaluationResponse;
 import com.examp.genifit.dto.response.GeminiFoodScanResponse;
@@ -11,7 +12,9 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -70,15 +73,16 @@ public class FoodEvaluationController {
 //
 //        return foodEvaluationService.evaluateScannedFood(evaluationRequest);
 //    }
-    @PostMapping(
-            value = "/scan-and-evaluate",
-            consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
-            produces = MediaType.APPLICATION_JSON_VALUE
-    )
-    public FoodEvaluationResponse scanAndEvaluate(
-            @RequestPart("image") MultipartFile image,
-            @RequestParam(name = "guestId", required = false) Integer guestId
-    ) {
+@PostMapping(
+        value = "/scan-and-evaluate",
+        consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
+        produces = MediaType.APPLICATION_JSON_VALUE
+)
+public ResponseEntity<ApiResponse<FoodEvaluationResponse>> scanAndEvaluate(
+        @RequestPart("image") MultipartFile image,
+        @RequestParam(name = "guestId", required = false) Integer guestId
+) {
+    try {
         if (image == null || image.isEmpty()) {
             throw new RuntimeException("Image file is required");
         }
@@ -108,8 +112,15 @@ public class FoodEvaluationController {
         evaluationRequest.setSource(scanResponse.getSource());
         evaluationRequest.setNote(scanResponse.getNote());
 
-        return foodEvaluationService.evaluateScannedFood(evaluationRequest);
+        FoodEvaluationResponse response = foodEvaluationService.evaluateScannedFood(evaluationRequest);
+
+        return ResponseEntity.ok(ApiResponse.success("Scan và đánh giá món ăn thành công", response));
+
+    } catch (RuntimeException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.fail(e.getMessage(), null));
     }
+}
 
     @PostMapping("/evaluate")
     public FoodEvaluationResponse evaluateScannedFood(
