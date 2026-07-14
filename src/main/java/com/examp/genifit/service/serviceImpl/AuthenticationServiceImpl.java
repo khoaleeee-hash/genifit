@@ -5,13 +5,8 @@ import com.examp.genifit.common.exception.ErrorCode;
 import com.examp.genifit.dto.request.*;
 import com.examp.genifit.dto.response.AuthenticationResponse;
 import com.examp.genifit.dto.response.IntrospectResponse;
-import com.examp.genifit.entity.InvalidatedToken;
-import com.examp.genifit.entity.OtpToken;
-import com.examp.genifit.entity.User;
-import com.examp.genifit.entity.UserRole;
-import com.examp.genifit.repository.InvalidatedTokenRepository;
-import com.examp.genifit.repository.OtpTokenRepository;
-import com.examp.genifit.repository.UserRepository;
+import com.examp.genifit.entity.*;
+import com.examp.genifit.repository.*;
 import com.examp.genifit.service.AuthenticationService;
 import com.examp.genifit.service.GoogleAuthService;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
@@ -49,6 +44,8 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     InvalidatedTokenRepository invalidatedTokenRepository;
     GoogleAuthService googleAuthService;
     OtpTokenRepository otpTokenRepository;
+    SubscriptionPlanRepository subscriptionPlanRepository;
+    UserSubscriptionRepository userSubscriptionRepository;
 
     @NonFinal
     @Value("${jwt.signerKey}")
@@ -230,6 +227,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 user.setRole(UserRole.MEMBER);
                 user.setIsActive(true);
                 user = userRepository.save(user);
+                assignFreePlan(user);
             }
 
             String accessToken = generateToken(user);
@@ -262,7 +260,9 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                     newUser.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
                     newUser.setRole(UserRole.GUEST);
                     newUser.setIsActive(true);
-                    return userRepository.save(newUser);
+                    User savedGuest = userRepository.save(newUser);
+                    assignFreePlan(savedGuest);
+                    return savedGuest;
                 });
 
         if (guestUser.getRole() != UserRole.GUEST) {
@@ -328,5 +328,21 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                 .refreshToken(refreshToken)
                 .authenticated(true)
                 .build();
+    }
+
+    private void assignFreePlan(User user) {
+        SubscriptionPlan freePlan = subscriptionPlanRepository.findFirstByPlanType(PlanType.FREE)
+                .orElseThrow(() -> new RuntimeException("Hệ thống chưa cấu hình gói FREE mặc định!"));
+
+        UserSubscription defaultSubscription = UserSubscription.builder()
+                .user(user)
+                .subscriptionPlan(freePlan)
+                .startDate(LocalDateTime.now())
+                .endDate(LocalDateTime.now().plusYears(100))
+                .status(SubscriptionStatus.ACTIVE)
+                .autoRenew(true)
+                .build();
+
+        userSubscriptionRepository.save(defaultSubscription);
     }
 }

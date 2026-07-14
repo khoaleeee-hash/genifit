@@ -11,6 +11,8 @@ import java.util.Optional;
 public interface SubscriptionPlanRepository
         extends JpaRepository<SubscriptionPlan, Integer> {
 
+    Optional<SubscriptionPlan> findFirstByPlanType(PlanType planType);
+
     Page<SubscriptionPlan> findByDeletedFalse(Pageable pageable);
 
     Page<SubscriptionPlan> findByActiveTrueAndDeletedFalse(Pageable pageable);
