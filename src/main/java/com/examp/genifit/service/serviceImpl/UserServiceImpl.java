@@ -99,6 +99,19 @@ public class UserServiceImpl implements UserService {
         user.setIsActive(true);
         userRepository.save(user);
 
+        SubscriptionPlan freePlan = subscriptionPlanRepository.findFirstByPlanType(PlanType.FREE)
+                .orElseThrow(() -> new RuntimeException("Hệ thống chưa cấu hình gói FREE mặc định!"));
+
+        UserSubscription defaultSubscription = UserSubscription.builder()
+                .user(user)
+                .subscriptionPlan(freePlan)
+                .startDate(LocalDateTime.now())
+                .endDate(LocalDateTime.now().plusYears(100))
+                .status(SubscriptionStatus.ACTIVE)
+                .autoRenew(true)
+                .build();
+        userSubscriptionRepository.save(defaultSubscription);
+
         otpTokenRepository.delete(validOtp);
 
         return userMapper.toUserResponse(user);
