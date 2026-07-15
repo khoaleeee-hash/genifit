@@ -15,9 +15,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
@@ -58,20 +61,21 @@ public class PaymentController {
                     → FE redirect user sang `payUrl` ngay sau khi nhận response (VD: `window.location.href = payUrl`).
                     """
     )
-    @SecurityRequirement(name = "bearerAuth")
     @PostMapping("/init")
     public ResponseEntity<PaymentResponseDto> initPayment(
-            @AuthenticationPrincipal UserDetails userDetails,
+            @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody PaymentRequestDto request
     ) {
+        String username = jwt.getSubject();
+
         PaymentResponseDto response = paymentService.initPayment(
-                userDetails.getUsername(),
+                username,
                 request.getPlanId(),
                 request.getPaymentMethod()
         );
+
         return ResponseEntity.ok(response);
     }
-
     // =========================================================================
     // PAYMENT HISTORY
     // =========================================================================

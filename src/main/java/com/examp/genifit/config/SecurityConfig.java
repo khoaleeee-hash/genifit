@@ -50,6 +50,9 @@ public class SecurityConfig {
                         // Food API cho frontend test
                         .requestMatchers("/api/foods/**").permitAll()
 
+                        // payment API, bắt buộc phải có token
+                        .requestMatchers("/api/payment/**").authenticated()
+
                         // Tạm thời cho phép hết nếu bạn đang test
                         .anyRequest().permitAll()
                 )
