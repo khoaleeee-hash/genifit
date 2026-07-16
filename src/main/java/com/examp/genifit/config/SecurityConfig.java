@@ -50,6 +50,13 @@ public class SecurityConfig {
                         // Food API cho frontend test
                         .requestMatchers("/api/foods/**").permitAll()
 
+                        .requestMatchers(
+                                "/api/payment/vnpay/ipn",
+                                "/api/payment/vnpay/redirect",
+                                "/api/payment/momo/ipn",
+                                "/api/payment/momo/redirect"
+                        ).permitAll()
+
                         // payment API, bắt buộc phải có token
                         .requestMatchers("/api/payment/**").authenticated()
 
