@@ -29,45 +29,46 @@ import java.time.temporal.ChronoUnit;
 public class WeightProgressServiceImpl implements WeightProgressService {
 
     private static final double ON_TRACK_THRESHOLD_PERCENT = 5.0;
+    private static final double MAINTAIN_TOLERANCE_KG = 0.5;
 
     private final UserRepository userRepository;
     private final UserProfileRepository userProfileRepository;
     private final WeightProgressRepository weightProgressRepository;
 
+    // ========================
+    // PUBLIC METHODS
+    // ========================
+
     @Override
     @Transactional
-    public WeightProgressResponse updateWeightProgress(Integer userId, UpdateWeightProgressRequest request) {
-        if (request.getCurrentWeight() == null || request.getCurrentWeight() <= 0) {
-            throw new ApiException(ErrorCode.INVALID_WEIGHT_VALUE, "Current weight must be greater than 0");
-        }
-
+    public WeightProgressResponse updateWeightProgress(Integer userId,
+                                                       UpdateWeightProgressRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
 
         UserProfile userProfile = userProfileRepository.findByUser_UserId(userId)
                 .orElseThrow(() -> new ApiException(ErrorCode.USER_PROFILE_NOT_FOUND));
 
-        Double startWeight = userProfile.getInitialWeight();
-        Double targetWeight = userProfile.getTargetWeightKg();
-        LocalDate targetDate = userProfile.getTargetDate();
-        LocalDate startDate = userProfile.getGoalStartDate();
         LocalDate recordedDate = LocalDate.now();
+        double currentWeight = request.getCurrentWeight();
 
-        if (startWeight == null || targetWeight == null || targetDate == null || startDate == null) {
-            throw new ApiException(ErrorCode.VALIDATION_ERROR, "Vui lòng thiết lập hồ sơ mục tiêu giảm cân trước khi cập nhật tiến độ.");
-        }
+        Double startWeight  = userProfile.getInitialWeight();
+        Double targetWeight = userProfile.getTargetWeightKg();
+        LocalDate startDate = userProfile.getGoalStartDate();
+        LocalDate targetDate = userProfile.getTargetDate();
 
-        validateProgressConfig(startWeight, targetWeight, targetDate, recordedDate);
+        // Xác định loại goal của user
+        GoalType goalType = resolveGoalType(startWeight, targetWeight, targetDate, startDate);
 
-        double expectedProgressPercent = calculateExpectedProgressPercent(startDate, targetDate, recordedDate);
+        // Tính progress theo từng loại goal
+        ProgressResult progressResult = calculateProgress(
+                goalType, startWeight, targetWeight,
+                startDate, targetDate, recordedDate, currentWeight
+        );
 
-        double actualProgressPercent = calculateActualProgressPercent(startWeight, targetWeight, request.getCurrentWeight());
-
-        double differencePercent = roundOneDecimal(actualProgressPercent - expectedProgressPercent);
-
-        ProgressStatus progressStatus = resolveProgressStatus(differencePercent);
-
-        WeightProgress weightProgress = weightProgressRepository.findByUser_UserIdAndRecordedDate(userId, recordedDate)
+        // Lưu WeightProgress
+        WeightProgress weightProgress = weightProgressRepository
+                .findByUser_UserIdAndRecordedDate(userId, recordedDate)
                 .orElseGet(() -> {
                     WeightProgress progress = new WeightProgress();
                     progress.setUser(user);
@@ -75,70 +76,139 @@ public class WeightProgressServiceImpl implements WeightProgressService {
                     return progress;
                 });
 
-        weightProgress.setCurrentWeight(request.getCurrentWeight());
-        weightProgress.setProgressPercent(actualProgressPercent);
-        weightProgress.setProgressStatus(progressStatus);
+        weightProgress.setCurrentWeight(currentWeight);
+        weightProgress.setProgressPercent(progressResult.actualProgressPercent());
+        weightProgress.setProgressStatus(progressResult.progressStatus());
 
         WeightProgress savedProgress = weightProgressRepository.save(weightProgress);
 
-        userProfile.setWeightKg(request.getCurrentWeight());
+        // Cập nhật cân nặng hiện tại trong profile
+        userProfile.setWeightKg(currentWeight);
         userProfileRepository.save(userProfile);
 
-        return WeightProgressResponse.builder()
-                .progressId(savedProgress.getProgressId())
-                .userId(userId)
-                .recordedDate(savedProgress.getRecordedDate())
-                .startWeight(startWeight)
-                .currentWeight(savedProgress.getCurrentWeight())
-                .targetWeight(targetWeight)
-                .targetDate(targetDate)
-                .expectedProgressPercent(expectedProgressPercent)
-                .actualProgressPercent(actualProgressPercent)
-                .differencePercent(differencePercent)
-                .progressStatus(progressStatus)
-                .message(buildProgressMessage(progressStatus, differencePercent))
-                .build();
+        return buildResponse(savedProgress, userId, startWeight, targetWeight,
+                targetDate, progressResult);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<WeightProgressHistoryResponse> getWeightProgressHistory(Integer userId, Integer pageNum, Integer pageSize) {
+    public Page<WeightProgressHistoryResponse> getWeightProgressHistory(
+            Integer userId, Integer pageNum, Integer pageSize) {
+
         if (!userRepository.existsById(userId)) {
             throw new ApiException(ErrorCode.USER_NOT_FOUND);
         }
 
-        Pageable pageable = PageRequest.of(pageNum, pageSize,
+        Pageable pageable = PageRequest.of(
+                pageNum, pageSize,
                 Sort.by(Sort.Direction.DESC, "recordedDate")
-                        .and(Sort.by(Sort.Direction.DESC, "createdAt")));
+                        .and(Sort.by(Sort.Direction.DESC, "createdAt"))
+        );
 
-        return weightProgressRepository.findAllByUser_UserId(userId, pageable)
+        return weightProgressRepository
+                .findAllByUser_UserId(userId, pageable)
                 .map(this::mapToWeightProgressHistoryResponse);
     }
 
-    private void validateProgressConfig(Double startWeight, Double targetWeight,
-                                        LocalDate targetDate, LocalDate recordedDate) {
-        if (startWeight == null || startWeight <= 0) {
-            throw new ApiException(ErrorCode.INVALID_WEIGHT_PROGRESS_CONFIG, "Start weight is missing or invalid");
+    // ========================
+    // GOAL TYPE
+    // ========================
+
+    private GoalType resolveGoalType(Double startWeight, Double targetWeight,
+                                     LocalDate targetDate, LocalDate startDate) {
+        // Thiếu thông tin => không có goal
+        if (startWeight == null || targetWeight == null
+                || targetDate == null || startDate == null) {
+            return GoalType.NO_GOAL;
         }
 
-        if (targetWeight == null || targetWeight <= 0) {
-            throw new ApiException(ErrorCode.INVALID_WEIGHT_PROGRESS_CONFIG, "Target weight is missing or invalid");
+        double diff = targetWeight - startWeight;
+
+        if (Math.abs(diff) < 0.01) { // dùng epsilon thay vì == để tránh float precision
+            return GoalType.MAINTAINING;
         }
 
-        if (targetDate == null) {
-            throw new ApiException(ErrorCode.INVALID_WEIGHT_PROGRESS_CONFIG, "Target date is required");
-        }
+        return diff < 0 ? GoalType.LOSE_WEIGHT : GoalType.GAIN_WEIGHT;
+    }
 
+    // ========================
+    // CALCULATE PROGRESS
+    // ========================
+
+    private ProgressResult calculateProgress(GoalType goalType,
+                                             Double startWeight, Double targetWeight,
+                                             LocalDate startDate, LocalDate targetDate,
+                                             LocalDate recordedDate, double currentWeight) {
+        return switch (goalType) {
+            case LOSE_WEIGHT, GAIN_WEIGHT ->
+                    calculateWeightChangeProgress(
+                            goalType, startWeight, targetWeight,
+                            startDate, targetDate, recordedDate, currentWeight
+                    );
+            case MAINTAINING ->
+                    calculateMaintainProgress(targetWeight, currentWeight);
+
+            case NO_GOAL ->
+                    ProgressResult.noGoal();
+        };
+    }
+
+    private ProgressResult calculateWeightChangeProgress(GoalType goalType,
+                                                         Double startWeight, Double targetWeight,
+                                                         LocalDate startDate, LocalDate targetDate,
+                                                         LocalDate recordedDate, double currentWeight) {
+        validateWeightChangeConfig(targetDate, recordedDate);
+
+        double expectedPercent = calculateExpectedProgressPercent(startDate, targetDate, recordedDate);
+        double actualPercent = calculateActualProgressPercent(startWeight, targetWeight, currentWeight);
+        double differencePercent = roundOneDecimal(actualPercent - expectedPercent);
+
+        ProgressStatus status = resolveWeightChangeStatus(differencePercent);
+
+        return new ProgressResult(
+                expectedPercent,
+                actualPercent,
+                differencePercent,
+                status,
+                buildWeightChangeMessage(status, differencePercent)
+        );
+    }
+
+    private ProgressResult calculateMaintainProgress(Double targetWeight, double currentWeight) {
+        double deviation = Math.abs(currentWeight - targetWeight);
+        boolean isOnTrack = deviation <= MAINTAIN_TOLERANCE_KG;
+
+        ProgressStatus status = isOnTrack
+                ? ProgressStatus.MAINTAINING
+                : ProgressStatus.OUT_OF_RANGE;
+
+        String message = isOnTrack
+                ? "Bạn đang giữ cân ổn định. Tiếp tục duy trì nhé!"
+                : String.format("Cân nặng của bạn đang lệch %.1f kg so với mục tiêu giữ dáng.", deviation);
+
+        return new ProgressResult(null, null, null, status, message);
+    }
+
+    // ========================
+    // VALIDATE
+    // ========================
+
+    private void validateWeightChangeConfig(LocalDate targetDate, LocalDate recordedDate) {
         if (!targetDate.isAfter(recordedDate)) {
-            throw new ApiException(ErrorCode.INVALID_WEIGHT_PROGRESS_CONFIG, "Target date must be after today");
-        }
-
-        if (startWeight.equals(targetWeight)) {
-            throw new ApiException(ErrorCode.INVALID_WEIGHT_PROGRESS_CONFIG, "Start weight and target weight must be different");
+            throw new ApiException(
+                    ErrorCode.INVALID_WEIGHT_PROGRESS_CONFIG,
+                    "Ngày mục tiêu phải sau ngày hôm nay. Vui lòng cập nhật lại mục tiêu."
+            );
         }
     }
 
-    private double calculateExpectedProgressPercent(LocalDate startDate, LocalDate targetDate, LocalDate currentDate) {
+    // ========================
+    // CALCULATE HELPERS
+    // ========================
+
+    private double calculateExpectedProgressPercent(LocalDate startDate,
+                                                    LocalDate targetDate,
+                                                    LocalDate currentDate) {
         long totalDays = ChronoUnit.DAYS.between(startDate, targetDate);
         long passedDays = ChronoUnit.DAYS.between(startDate, currentDate);
 
@@ -147,75 +217,73 @@ public class WeightProgressServiceImpl implements WeightProgressService {
         }
 
         double percent = passedDays * 100.0 / totalDays;
-
-        if (percent < 0) {
-            percent = 0.0;
-        }
-
-        if (percent > 100) {
-            percent = 100.0;
-        }
-
-        return roundOneDecimal(percent);
+        return roundOneDecimal(clamp(percent, 0.0, 100.0));
     }
 
-    private double calculateActualProgressPercent(Double startWeight, Double targetWeight, Double currentWeight) {
-        double totalChangeNeeded = Math.abs(startWeight - targetWeight);
+    private double calculateActualProgressPercent(Double startWeight,
+                                                  Double targetWeight,
+                                                  double currentWeight) {
+        double totalChange = Math.abs(targetWeight - startWeight);
 
-        if (totalChangeNeeded == 0) {
+        if (totalChange == 0) {
             return 100.0;
         }
 
-        double actualChange;
+        double actualChange = targetWeight < startWeight
+                ? startWeight - currentWeight
+                : currentWeight - startWeight;
 
-        if (targetWeight < startWeight) {
-            actualChange = startWeight - currentWeight;
-        } else {
-            actualChange = currentWeight - startWeight;
-        }
-
-        double percent = actualChange * 100.0 / totalChangeNeeded;
-
-        if (percent < 0) {
-            percent = 0.0;
-        }
-
-        if (percent > 100) {
-            percent = 100.0;
-        }
-
-        return roundOneDecimal(percent);
+        double percent = actualChange * 100.0 / totalChange;
+        return roundOneDecimal(clamp(percent, 0.0, 100.0));
     }
 
-    private ProgressStatus resolveProgressStatus(double differencePercent) {
+    private ProgressStatus resolveWeightChangeStatus(double differencePercent) {
         if (differencePercent > ON_TRACK_THRESHOLD_PERCENT) {
             return ProgressStatus.FASTER;
         }
-
         if (differencePercent < -ON_TRACK_THRESHOLD_PERCENT) {
             return ProgressStatus.SLOWER;
         }
-
         return ProgressStatus.ON_TRACK;
     }
 
-    private String buildProgressMessage(ProgressStatus status, double differencePercent) {
-        double absDifference = Math.abs(differencePercent);
-
+    private String buildWeightChangeMessage(ProgressStatus status, double differencePercent) {
+        double abs = Math.abs(differencePercent);
         return switch (status) {
-            case FASTER -> "Bạn đang nhanh hơn tiến độ " + absDifference + "%";
-            case SLOWER -> "Bạn đang chậm hơn tiến độ " + absDifference + "%";
-            case ON_TRACK -> "Bạn đang theo đúng tiến độ";
+            case FASTER   -> String.format("Bạn đang nhanh hơn tiến độ %.1f%%!", abs);
+            case SLOWER   -> String.format("Bạn đang chậm hơn tiến độ %.1f%%. Cố lên nhé!", abs);
+            case ON_TRACK -> "Bạn đang theo đúng tiến độ. Tiếp tục phát huy!";
+            default       -> "";
         };
     }
 
-    private double roundOneDecimal(double value) {
-        return Math.round(value * 10.0) / 10.0;
+    // ========================
+    // BUILD RESPONSE
+    // ========================
+
+    private WeightProgressResponse buildResponse(WeightProgress savedProgress,
+                                                 Integer userId,
+                                                 Double startWeight,
+                                                 Double targetWeight,
+                                                 LocalDate targetDate,
+                                                 ProgressResult result) {
+        return WeightProgressResponse.builder()
+                .progressId(savedProgress.getProgressId())
+                .userId(userId)
+                .recordedDate(savedProgress.getRecordedDate())
+                .startWeight(startWeight)
+                .currentWeight(savedProgress.getCurrentWeight())
+                .targetWeight(targetWeight)
+                .targetDate(targetDate)
+                .expectedProgressPercent(result.expectedProgressPercent())
+                .actualProgressPercent(result.actualProgressPercent())
+                .differencePercent(result.differencePercent())
+                .progressStatus(result.progressStatus())
+                .message(result.message())
+                .build();
     }
 
-    private WeightProgressHistoryResponse mapToWeightProgressHistoryResponse(
-            WeightProgress progress
-    ) {
+    private WeightProgressHistoryResponse mapToWeightProgressHistoryResponse(WeightProgress progress) {
         return WeightProgressHistoryResponse.builder()
                 .progressId(progress.getProgressId())
                 .recordedDate(progress.getRecordedDate())
@@ -224,5 +292,43 @@ public class WeightProgressServiceImpl implements WeightProgressService {
                 .progressStatus(progress.getProgressStatus())
                 .createdAt(progress.getCreatedAt())
                 .build();
+    }
+
+    // ========================
+    // UTILS
+    // ========================
+
+    private double roundOneDecimal(double value) {
+        return Math.round(value * 10.0) / 10.0;
+    }
+
+    private double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    // ========================
+    // INNER TYPES
+    // ========================
+    private enum GoalType {
+        LOSE_WEIGHT,
+        GAIN_WEIGHT,
+        MAINTAINING,
+        NO_GOAL
+    }
+
+    private record ProgressResult(
+            Double expectedProgressPercent,
+            Double actualProgressPercent,
+            Double differencePercent,
+            ProgressStatus progressStatus,
+            String message
+    ) {
+        static ProgressResult noGoal() {
+            return new ProgressResult(
+                    null, null, null,
+                    ProgressStatus.NO_GOAL,
+                    "Cân nặng đã được cập nhật thành công."
+            );
+        }
     }
 }
