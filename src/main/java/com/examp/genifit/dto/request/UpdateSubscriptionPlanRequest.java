@@ -15,7 +15,7 @@ public class UpdateSubscriptionPlanRequest {
     private String description;
     private BigDecimal price;
     private Integer durationDays;
-    private Integer aiScanLimitPerMonth;
+    private Integer maxAiScansPerDay;
     private Integer mealSuggestionLimitPerMonth;
     private Integer reminderLimit;
     private Integer maxMembers;
