@@ -1,5 +1,7 @@
 package com.examp.genifit.controller;
 
+import com.examp.genifit.common.exception.ApiException;
+import com.examp.genifit.common.exception.ErrorCode;
 import com.examp.genifit.common.response.ApiResponse;
 import com.examp.genifit.common.security.JwtUtils;
 import com.examp.genifit.dto.request.AddManualFoodRequest;
@@ -35,13 +37,18 @@ public class DailyLogController {
             @Valid @RequestBody AddManualFoodRequest request,
             Authentication authentication
     ) {
-        if (authentication == null || !authentication.isAuthenticated()) {
-            throw new RuntimeException("Bạn cần đăng nhập để thêm món ăn");
+        if (authentication == null
+                || !authentication.isAuthenticated()
+                || "anonymousUser".equals(authentication.getName())) {
+            throw new ApiException(
+                    ErrorCode.USER_NOT_FOUND,
+                    "Bạn cần đăng nhập để thêm món ăn");
         }
 
-        String username = authentication.getName();
-
-        return dailyLogService.addManualFood(username, request);
+        return dailyLogService.addManualFood(
+                authentication.getName(),
+                request
+        );
     }
 
     @GetMapping("/meals/history")

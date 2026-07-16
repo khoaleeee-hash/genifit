@@ -1,5 +1,7 @@
 package com.examp.genifit.service.serviceImpl;
 
+import com.examp.genifit.common.exception.ApiException;
+import com.examp.genifit.common.exception.ErrorCode;
 import com.examp.genifit.dto.request.FoodEvaluationRequest;
 import com.examp.genifit.dto.response.FoodEvaluationResponse;
 import com.examp.genifit.entity.DailyLog;
@@ -187,15 +189,24 @@ public class FoodEvaluationServiceImpl implements FoodEvaluationService {
 
     private void validateRequest(FoodEvaluationRequest request) {
         if (request.getUserId() == null && request.getGuestId() == null) {
-            throw new RuntimeException("Cần truyền userId hoặc guestId");
+            throw new ApiException(
+                    ErrorCode.USER_OR_GUEST_REQUIRED,
+                    "Cần truyền userId hoặc guestId"
+            );
         }
 
         if (request.getUserId() != null && request.getGuestId() != null) {
-            throw new RuntimeException("Chỉ được truyền userId hoặc guestId, không truyền cả hai");
+            throw new ApiException(
+                    ErrorCode.USER_GUEST_CONFLICT,
+                    "Chỉ được truyền userId hoặc guestId, không truyền cả hai"
+            );
         }
 
         if (request.getFoods() == null || request.getFoods().isEmpty()) {
-            throw new RuntimeException("Không có dữ liệu món ăn để đánh giá");
+            throw new ApiException(
+                    ErrorCode.FOOD_DATA_REQUIRED,
+                    "Không có dữ liệu món ăn để đánh giá"
+            );
         }
     }
 

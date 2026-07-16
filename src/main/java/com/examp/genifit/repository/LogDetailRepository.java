@@ -15,4 +15,5 @@ public interface LogDetailRepository extends JpaRepository<LogDetail, Integer> {
             String foodNameSnapshot,
             MealTime mealTime
     );
+    boolean existsByScanHistory_ScanId(Integer scanId);
 }

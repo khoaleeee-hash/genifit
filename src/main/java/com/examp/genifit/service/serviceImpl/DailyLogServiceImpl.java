@@ -41,10 +41,22 @@ public class DailyLogServiceImpl implements DailyLogService {
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy user đang đăng nhập"));
 
         if (request.getQuantity() == null || request.getQuantity() <= 0) {
-            throw new IllegalArgumentException("Số lượng món ăn phải lớn hơn 0");
+            throw new ApiException(
+                    ErrorCode.INVALID_FOOD_QUANTITY,
+                    "Số lượng món ăn phải lớn hơn 0");
         }
 
         ResolvedFoodInfo foodInfo = resolveFoodInfo(user, request);
+
+        if (foodInfo.getScanId() != null
+                && logDetailRepository.existsByScanHistory_ScanId(
+                foodInfo.getScanId()
+        )) {
+            throw new ApiException(
+                    ErrorCode.SCAN_ALREADY_ADDED,
+                    "Kết quả scan này đã được thêm vào lịch sử bữa ăn"
+            );
+        }
 
         LocalDate today = LocalDate.now();
 
@@ -60,7 +72,11 @@ public class DailyLogServiceImpl implements DailyLogService {
 
         if (foodInfo.getFoodId() != null) {
             foodItem = foodItemRepository.findById(foodInfo.getFoodId())
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn với foodId: " + foodInfo.getFoodId()));
+                    .orElseThrow(() -> new ApiException(
+                            ErrorCode.FOOD_NOT_FOUND,
+                            ("Không tìm thấy món ăn với foodId: " + foodInfo.getFoodId())
+                    ));
+
         }
 
         boolean isDuplicate = false;
@@ -110,7 +126,10 @@ public class DailyLogServiceImpl implements DailyLogService {
 
         if(foodInfo.getScanId() != null) {
             AIScanHistory scanHistory = aiScanHistoryRepository.findById(foodInfo.getScanId())
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy lịch sử scan với scanId: " + foodInfo.getScanId()));
+                    .orElseThrow(() -> new ApiException (
+                            ErrorCode.SCAN_HISTORY_NOT_FOUND,
+                            "Không tìm thấy lịch sử scan với scanId: " + foodInfo.getScanId())
+                    );
 
             logDetail.setScanHistory(scanHistory);
         }
@@ -157,7 +176,10 @@ public class DailyLogServiceImpl implements DailyLogService {
 
         DailyLog dailyLog = dailyLogRepository
                 .findByUser_UserIdAndLogDate(user.getUserId(), targetDate)
-                .orElseThrow(() -> new ApiException(ErrorCode.DAILY_LOG_NOT_FOUND));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.DAILY_LOG_NOT_FOUND,
+                        "Không tìm thấy lịch sử bữa ăn"
+                ));
 
         List<MealHistoryResponse.MealItem> meals = dailyLog.getLogDetails()
                 .stream()

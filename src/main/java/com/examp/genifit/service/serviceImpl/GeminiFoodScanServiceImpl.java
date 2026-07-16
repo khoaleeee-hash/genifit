@@ -194,6 +194,11 @@ public class GeminiFoodScanServiceImpl
                             guestId,
                             detectedFoodText,
                             totalCalories,
+                            totalProtein,
+                            totalCarbs,
+                            totalFat,
+                            resolveTotalQuantity(foods),
+                            resolveUnit(foods),
                             nutritionResult,
                             suitabilityStatus
                     );
@@ -606,6 +611,11 @@ public class GeminiFoodScanServiceImpl
             Integer guestId,
             String detectedFood,
             Double estimatedCalories,
+            Double protein,
+            Double carbs,
+            Double fat,
+            Double quantity,
+            String unit,
             String nutritionResult,
             SuitabilityStatus suitabilityStatus
     ) {
@@ -614,45 +624,100 @@ public class GeminiFoodScanServiceImpl
 
         if (userId != null) {
             user = userRepository.findById(userId)
-                    .orElseThrow(
-                            () -> new RuntimeException(
-                                    "Không tìm thấy user có id: "
-                                            + userId
+                    .orElseThrow(() ->
+                            new RuntimeException(
+                                    "Không tìm thấy user có id: " + userId
                             )
                     );
         }
 
         if (guestId != null) {
             guest = guestRepository.findById(guestId)
-                    .orElseThrow(
-                            () -> new RuntimeException(
-                                    "Không tìm thấy guest có id: "
-                                            + guestId
+                    .orElseThrow(() ->
+                            new RuntimeException(
+                                    "Không tìm thấy guest có id: " + guestId
                             )
                     );
         }
 
-        AIScanHistory history =
-                AIScanHistory.builder()
-                        .user(user)
-                        .guest(guest)
-                        .imageUrl(null)
-                        .detectedFood(detectedFood)
-                        .estimatedCalories(
-                                estimatedCalories
-                        )
-                        .nutritionResult(
-                                nutritionResult
-                        )
-                        .suitabilityStatus(
-                                suitabilityStatus
-                        )
-                        .build();
+        AIScanHistory history = AIScanHistory.builder()
+                .user(user)
+                .guest(guest)
+                .imageUrl(null)
+                .detectedFood(detectedFood)
+                .estimatedCalories(safeDouble(estimatedCalories))
+                .protein(safeDouble(protein))
+                .carbs(safeDouble(carbs))
+                .fat(safeDouble(fat))
+                .quantity(
+                        quantity == null || quantity <= 0
+                                ? 1.0
+                                : quantity
+                )
+                .unit(
+                        unit == null || unit.isBlank()
+                                ? "phần"
+                                : unit
+                )
+                .nutritionResult(nutritionResult)
+                .suitabilityStatus(suitabilityStatus)
+                .build();
 
-        return aiScanHistoryRepository.save(
-                history
-        );
+        return aiScanHistoryRepository.save(history);
     }
+
+//    private AIScanHistory saveScanHistory(
+//            Integer userId,
+//            Integer guestId,
+//            String detectedFood,
+//            Double estimatedCalories,
+//            String nutritionResult,
+//            SuitabilityStatus suitabilityStatus
+//    ) {
+//        User user = null;
+//        Guest guest = null;
+//
+//        if (userId != null) {
+//            user = userRepository.findById(userId)
+//                    .orElseThrow(
+//                            () -> new RuntimeException(
+//                                    "Không tìm thấy user có id: "
+//                                            + userId
+//                            )
+//                    );
+//        }
+//
+//        if (guestId != null) {
+//            guest = guestRepository.findById(guestId)
+//                    .orElseThrow(
+//                            () -> new RuntimeException(
+//                                    "Không tìm thấy guest có id: "
+//                                            + guestId
+//                            )
+//                    );
+//        }
+//
+//        AIScanHistory history =
+//                AIScanHistory.builder()
+//                        .user(user)
+//                        .guest(guest)
+//                        .imageUrl(null)
+//                        .detectedFood(detectedFood)
+//                        .estimatedCalories(
+//                                estimatedCalories
+//                        )
+//                        .nutritionResult(
+//                                nutritionResult
+//                        )
+//                        .suitabilityStatus(
+//                                suitabilityStatus
+//                        )
+//                        .build();
+//
+//        return aiScanHistoryRepository.save(
+//                history
+//        );
+//    }
 
     private SuitabilityStatus calculateSuitabilityStatus(
             Double confidence
@@ -922,5 +987,46 @@ public class GeminiFoodScanServiceImpl
                         + " lần/ngày. Vui lòng đăng nhập để sử dụng thêm!");
             }
         }
+    }
+
+    private Double resolveTotalQuantity(
+            List<DetectedFoodItemResponse> foods
+    ) {
+        if (foods == null || foods.isEmpty()) {
+            return 1.0;
+        }
+
+        double totalQuantity = foods.stream()
+                .map(DetectedFoodItemResponse::getQuantity)
+                .filter(java.util.Objects::nonNull)
+                .filter(quantity -> quantity > 0)
+                .mapToDouble(Double::doubleValue)
+                .sum();
+
+        return totalQuantity > 0 ? totalQuantity : 1.0;
+    }
+
+    private String resolveUnit(
+            List<DetectedFoodItemResponse> foods
+    ) {
+        if (foods == null || foods.isEmpty()) {
+            return "phần";
+        }
+
+        List<String> units = foods.stream()
+                .map(DetectedFoodItemResponse::getUnit)
+                .filter(unit -> unit != null && !unit.isBlank())
+                .distinct()
+                .toList();
+
+        if (units.isEmpty()) {
+            return "phần";
+        }
+
+        if (units.size() == 1) {
+            return units.getFirst();
+        }
+
+        return "phần";
     }
 }
