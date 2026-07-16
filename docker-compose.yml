@@ -28,6 +28,10 @@ services:
       MOMO_SECRET_KEY: ${MOMO_SECRET_KEY}
       MOMO_IPN_URL: ${MOMO_IPN_URL}
       MOMO_REDIRECT_URL: ${MOMO_REDIRECT_URL}
+      VNPAY_TMN_CODE: ${VNPAY_TMN_CODE}
+      VNPAY_HASH_SECRET: ${VNPAY_HASH_SECRET}
+      VNPAY_IPN_URL: ${VNPAY_IPN_URL}
+      VNPAY_REDIRECT_URL: ${VNPAY_REDIRECT_URL}
     depends_on:
       - mysql                    # depends_on đơn giản, không cần condition
 
