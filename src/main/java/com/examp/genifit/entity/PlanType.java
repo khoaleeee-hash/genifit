@@ -2,12 +2,8 @@ package com.examp.genifit.entity;
 
 public enum PlanType {
     FREE,
-    TRIAL_PREMIUM,
-    STUDENT,
-    FAMILY,
-    FITNESS,
+    PREMIUM,
+    TRIAL,
     COACH,
-    WEIGHT_LOSS,
-    WEIGHT_GAIN,
-    BLOOD_SUGAR_CONTROL
+    FAMILY
 }

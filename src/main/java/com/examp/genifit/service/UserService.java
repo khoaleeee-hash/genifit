@@ -5,6 +5,7 @@ import com.examp.genifit.dto.request.AssignSubscriptionRequest;
 import com.examp.genifit.dto.request.CreateUserRequest;
 import com.examp.genifit.dto.request.ResetPasswordRequest;
 import com.examp.genifit.dto.request.UpdateUserProfileRequest;
+import com.examp.genifit.dto.response.CancelSubscriptionResponse;
 import com.examp.genifit.dto.response.UserProfileResponse;
 import com.examp.genifit.dto.response.UserResponse;
 import com.examp.genifit.dto.response.UserSubscriptionResponse;
@@ -27,8 +28,5 @@ public interface UserService {
     UserProfileResponse updateMyProfile(UpdateUserProfileRequest request);
 
     UserSubscriptionResponse assignSubscription(AssignSubscriptionRequest request);
-    UserSubscriptionResponse getMyActiveSubscription();
-    List<UserSubscriptionResponse> getMySubscriptionHistory();
-    void cancelMySubscription();
 
 }

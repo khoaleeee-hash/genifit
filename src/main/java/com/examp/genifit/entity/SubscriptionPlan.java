@@ -35,8 +35,13 @@ public class SubscriptionPlan {
     @Column(nullable = false)
     private Integer durationDays;
 
+    // SỬA: Đổi từ theo tháng sang theo ngày để chặn đứng spam đúng ý Khoa (Free = 3, Premium = -1 hoặc 9999)
     @Column(nullable = false)
-    private Integer aiScanLimitPerMonth;
+    private Integer maxAiScansPerDay;
+
+    // THÊM: Quản lý giới hạn xem lịch sử ăn uống (Free = 7, Premium = -1 hoặc 9999)
+    @Column(nullable = false)
+    private Integer maxHistoryViewDays;
 
     @Column(nullable = false)
     private Integer mealSuggestionLimitPerMonth;
@@ -110,8 +115,12 @@ public class SubscriptionPlan {
             durationDays = 30;
         }
 
-        if (aiScanLimitPerMonth == null) {
-            aiScanLimitPerMonth = 0;
+        if (maxAiScansPerDay == null) {
+            maxAiScansPerDay = 3;
+        }
+
+        if (maxHistoryViewDays == null) {
+            maxHistoryViewDays = 7;
         }
 
         if (mealSuggestionLimitPerMonth == null) {

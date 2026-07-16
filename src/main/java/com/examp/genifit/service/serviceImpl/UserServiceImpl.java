@@ -7,8 +7,7 @@ import com.examp.genifit.dto.request.AssignSubscriptionRequest;
 import com.examp.genifit.dto.request.CreateUserRequest;
 import com.examp.genifit.dto.request.ResetPasswordRequest;
 import com.examp.genifit.dto.request.UpdateUserProfileRequest;
-import com.examp.genifit.dto.response.UserProfileResponse;
-import com.examp.genifit.dto.response.UserResponse;
+import com.examp.genifit.dto.response.*;
 import com.examp.genifit.entity.OtpToken;
 import com.examp.genifit.entity.User;
 import com.examp.genifit.entity.UserProfile;
@@ -16,12 +15,12 @@ import com.examp.genifit.entity.UserRole;
 import com.examp.genifit.mapper.UserMapper;
 import com.examp.genifit.repository.OtpTokenRepository;
 import com.examp.genifit.repository.UserProfileRepository;
-import com.examp.genifit.dto.response.UserSubscriptionResponse;
 import com.examp.genifit.entity.*;
 import com.examp.genifit.repository.SubscriptionPlanRepository;
 import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.repository.UserSubscriptionRepository;
 import com.examp.genifit.service.EmailService;
+import com.examp.genifit.service.MoMoService;
 import com.examp.genifit.service.UserService;
 import com.examp.genifit.util.CalorieCalculatorUtil;
 import lombok.AccessLevel;
@@ -33,6 +32,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.math.RoundingMode;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -54,6 +57,7 @@ public class UserServiceImpl implements UserService {
     PasswordEncoder passwordEncoder;
     EmailService emailService;
     UserProfileRepository userProfileRepository;
+    MoMoService  moMoService;
 
     @Override
     @Transactional
@@ -94,6 +98,19 @@ public class UserServiceImpl implements UserService {
         user.setRole(UserRole.MEMBER);
         user.setIsActive(true);
         userRepository.save(user);
+
+        SubscriptionPlan freePlan = subscriptionPlanRepository.findFirstByPlanType(PlanType.FREE)
+                .orElseThrow(() -> new RuntimeException("Hệ thống chưa cấu hình gói FREE mặc định!"));
+
+        UserSubscription defaultSubscription = UserSubscription.builder()
+                .user(user)
+                .subscriptionPlan(freePlan)
+                .startDate(LocalDateTime.now())
+                .endDate(LocalDateTime.now().plusYears(100))
+                .status(SubscriptionStatus.ACTIVE)
+                .autoRenew(true)
+                .build();
+        userSubscriptionRepository.save(defaultSubscription);
 
         otpTokenRepository.delete(validOtp);
 
@@ -137,7 +154,10 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public UserSubscriptionResponse assignSubscription(AssignSubscriptionRequest request) {
         if (request == null || request.getUserId() == null || request.getPlanId() == null) {
-            throw new ApiException(ErrorCode.INVALID_SUBSCRIPTION_REQUEST);
+            throw new ApiException(
+                    ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
+                    "Gói đăng kí này không hợp lệ hoặc không tồn tại"
+            );
         }
 
         User user = userRepository.findById(request.getUserId())
@@ -147,7 +167,10 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new ApiException(ErrorCode.SUBSCRIPTION_PLAN_NOT_FOUND));
 
         if (plan.getActive() == null || !plan.getActive()) {
-            throw new ApiException(ErrorCode.SUBSCRIPTION_PLAN_INACTIVE);
+            throw new ApiException(
+                    ErrorCode.SUBSCRIPTION_PLAN_INACTIVE,
+                    "Gói đăng kí này hiện không còn hoạt động"
+            );
         }
 
         userSubscriptionRepository
@@ -172,74 +195,48 @@ public class UserServiceImpl implements UserService {
 
         UserSubscription savedSubscription = userSubscriptionRepository.save(subscription);
 
-        return new UserSubscriptionResponse(savedSubscription);
-    }
-
-    @Override
-    public UserSubscriptionResponse getMyActiveSubscription() {
-        User currentUser = getCurrentUser();
-
-        UserSubscription subscription = userSubscriptionRepository
-                .findFirstByUserAndStatusOrderByEndDateDesc(
-                        currentUser,
-                        SubscriptionStatus.ACTIVE
-                )
-                .orElseThrow(() -> new ApiException(ErrorCode.ACTIVE_SUBSCRIPTION_NOT_FOUND));
-
-        if (subscription.getEndDate().isBefore(LocalDateTime.now())) {
-            subscription.setStatus(SubscriptionStatus.EXPIRED);
-            userSubscriptionRepository.save(subscription);
-
-            throw new ApiException(ErrorCode.ACTIVE_SUBSCRIPTION_NOT_FOUND);
-        }
-
-        return new UserSubscriptionResponse(subscription);
-    }
-
-    @Override
-    public List<UserSubscriptionResponse> getMySubscriptionHistory() {
-        User currentUser = getCurrentUser();
-
-        return userSubscriptionRepository.findByUserOrderByCreatedAtDesc(currentUser)
-                .stream()
-                .map(UserSubscriptionResponse::new)
-                .toList();
-    }
-
-    @Override
-    public void cancelMySubscription() {
-        User currentUser = getCurrentUser();
-
-        UserSubscription subscription = userSubscriptionRepository
-                .findFirstByUserAndStatusOrderByEndDateDesc(
-                        currentUser,
-                        SubscriptionStatus.ACTIVE
-                )
-                .orElseThrow(() -> new ApiException(ErrorCode.ACTIVE_SUBSCRIPTION_NOT_FOUND));
-
-        subscription.setStatus(SubscriptionStatus.CANCELLED);
-        subscription.setCancelledAt(LocalDateTime.now());
-
-        userSubscriptionRepository.save(subscription);
-    }
+        return UserSubscriptionResponse.builder()
+                .subscriptionId(savedSubscription.getSubscriptionId())
+                .userId(savedSubscription.getUser().getUserId())
+                .username(savedSubscription.getUser().getUsername())
+                .planId(savedSubscription.getSubscriptionPlan().getPlanId())
+                .planType(savedSubscription.getSubscriptionPlan().getPlanType())
+                .planName(savedSubscription.getSubscriptionPlan().getPlanName())
+                .startDate(savedSubscription.getStartDate())
+                .endDate(savedSubscription.getEndDate())
+                .status(savedSubscription.getStatus())
+                .autoRenew(savedSubscription.getAutoRenew())
+                .cancelledAt(savedSubscription.getCancelledAt())
+                .createdAt(savedSubscription.getCreatedAt())
+                .updatedAt(savedSubscription.getUpdatedAt())
+                .build();    }
 
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
         if (authentication == null || !authentication.isAuthenticated()) {
-            throw new ApiException(ErrorCode.UNAUTHENTICATED);
+            throw new ApiException(
+                    ErrorCode.UNAUTHENTICATED,
+                    "Người dùng chưa đăng nhập"
+            );
         }
 
         Object principal = authentication.getPrincipal();
 
         if (principal == null || principal.equals("anonymousUser")) {
-            throw new ApiException(ErrorCode.UNAUTHENTICATED);
+            throw new ApiException(
+                    ErrorCode.UNAUTHENTICATED,
+                    "Người dùng chưa đăng nhập"
+            );
         }
 
         String username = authentication.getName();
 
         return userRepository.findByUsernameAndIsActiveTrue(username)
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.USER_NOT_FOUND,
+                        "Không tìm thấy người dùng"
+                ));
     }
 
     @Override
@@ -249,7 +246,10 @@ public class UserServiceImpl implements UserService {
         String currentUsername = context.getAuthentication().getName();
 
         User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.USER_NOT_FOUND,
+                        "Không tìm thấy người dùng"
+                ));
 
         user.setIsActive(false);
         userRepository.save(user);
@@ -259,7 +259,10 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void generateAndSendOtpForForgotPassword(String email) {
         if (!userRepository.existsByEmailAndIsActiveTrue(email)) {
-            throw new ApiException(ErrorCode.USER_NOT_FOUND);
+            throw new ApiException(
+                    ErrorCode.USER_NOT_FOUND,
+                    "Không tìm thấy người dùng"
+            );
         }
 
         otpTokenRepository.deleteByEmail(email);
@@ -279,13 +282,22 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
         User user = userRepository.findByEmailAndIsActiveTrue(request.getEmail())
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.USER_NOT_FOUND,
+                        "Không tìm thấy người dùng"
+                ));
 
         OtpToken validOtp = otpTokenRepository.findByEmailAndOtpCode(request.getEmail(), request.getOtpCode())
-                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_OTP));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.INVALID_OTP,
+                        "Mã OTP không hợp lệ"
+                ));
 
         if (validOtp.getExpiryTime().isBefore(LocalDateTime.now())) {
-            throw new ApiException(ErrorCode.OTP_EXPIRED);
+            throw new ApiException(
+                    ErrorCode.OTP_EXPIRED,
+                    "Mã OTP đã hết hạn"
+            );
         }
 
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
@@ -302,7 +314,10 @@ public class UserServiceImpl implements UserService {
     @Override
     public UserResponse getUser(Integer id) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.USER_NOT_FOUND,
+                        "Không tìm thấy người dùng"
+                ));
 
         return userMapper.toUserResponse(user);
     }
@@ -317,7 +332,10 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void deleteUserById(Integer id) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.USER_NOT_FOUND,
+                        "Không tìm thấy người dùng"
+                ));
 
         user.setIsActive(false);
         userRepository.save(user);
@@ -330,7 +348,10 @@ public class UserServiceImpl implements UserService {
         String currentUsername = context.getAuthentication().getName();
 
         User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.USER_NOT_FOUND,
+                        "Không tìm thấy người dùng"
+                ));
 
         UserProfile profile = userProfileRepository.findByUser(user)
                 .orElse(new UserProfile());
@@ -378,5 +399,14 @@ public class UserServiceImpl implements UserService {
         userProfileRepository.save(profile);
 
         return userMapper.toUserProfileResponse(profile);
+    }
+
+    private record RefundResult(
+            Long usedDays,
+            RefundStatus refundStatus,
+            Integer refundPercent,
+            BigDecimal refundAmount,
+            String message
+    ) {
     }
 }

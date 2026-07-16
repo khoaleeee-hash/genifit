@@ -1,15 +1,16 @@
 package com.examp.genifit.dto.response;
 
 import com.examp.genifit.entity.PlanType;
-import com.examp.genifit.entity.SubscriptionPlan;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 
 import java.math.BigDecimal;
 
 @Getter
 @Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 @JsonPropertyOrder({
         "planId",
         "planType",
@@ -17,7 +18,8 @@ import java.math.BigDecimal;
         "description",
         "price",
         "durationDays",
-        "aiScanLimitPerMonth",
+        "maxAiScansPerDay",
+        "maxHistoryViewDays",
         "mealSuggestionLimitPerMonth",
         "reminderLimit",
         "maxMembers",
@@ -44,7 +46,8 @@ public class SubscriptionPlanResponse {
     private BigDecimal price;
     private Integer durationDays;
 
-    private Integer aiScanLimitPerMonth;
+    private Integer maxAiScansPerDay;
+    private Integer maxHistoryViewDays;
     private Integer mealSuggestionLimitPerMonth;
     private Integer reminderLimit;
 
@@ -67,29 +70,4 @@ public class SubscriptionPlanResponse {
 
     private Boolean active;
 
-    public SubscriptionPlanResponse(SubscriptionPlan plan) {
-        this.planId = plan.getPlanId();
-        this.planType = plan.getPlanType();
-        this.planName = plan.getPlanName();
-        this.description = plan.getDescription();
-        this.price = plan.getPrice();
-        this.durationDays = plan.getDurationDays();
-        this.aiScanLimitPerMonth = plan.getAiScanLimitPerMonth();
-        this.mealSuggestionLimitPerMonth = plan.getMealSuggestionLimitPerMonth();
-        this.reminderLimit = plan.getReminderLimit();
-        this.maxMembers = plan.getMaxMembers();
-        this.maxClients = plan.getMaxClients();
-        this.trial = plan.getTrial();
-        this.familySharingEnabled = plan.getFamilySharingEnabled();
-        this.coachFeaturesEnabled = plan.getCoachFeaturesEnabled();
-        this.mealPlanEnabled = plan.getMealPlanEnabled();
-        this.weeklyReportEnabled = plan.getWeeklyReportEnabled();
-        this.monthlyReportEnabled = plan.getMonthlyReportEnabled();
-        this.exportReportEnabled = plan.getExportReportEnabled();
-        this.macroTrackingEnabled = plan.getMacroTrackingEnabled();
-        this.calorieDeficitTrackingEnabled = plan.getCalorieDeficitTrackingEnabled();
-        this.calorieSurplusTrackingEnabled = plan.getCalorieSurplusTrackingEnabled();
-        this.bloodSugarControlEnabled = plan.getBloodSugarControlEnabled();
-        this.active = plan.getActive();
-    }
 }

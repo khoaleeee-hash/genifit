@@ -1,5 +1,8 @@
 package com.examp.genifit.service.serviceImpl;
 
+import com.examp.genifit.common.exception.ApiException;
+import com.examp.genifit.common.exception.ErrorCode;
+import com.examp.genifit.dto.response.MoMoRefundResponse;
 import com.examp.genifit.entity.*;
 import com.examp.genifit.repository.PaymentTransactionRepository;
 import com.examp.genifit.repository.SubscriptionPlanRepository;
@@ -13,8 +16,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -27,6 +30,9 @@ public class MoMoServiceImpl implements MoMoService {
     private final PaymentTransactionRepository transactionRepository;
     private final UserSubscriptionRepository subscriptionRepository;
     private final SubscriptionPlanRepository planRepository;
+
+    @Value("${momo.refund-url}")
+    private String refundUrl;
 
     @Value("${momo.partner-code}")
     private String partnerCode;
@@ -65,7 +71,6 @@ public class MoMoServiceImpl implements MoMoService {
 
         String signature = hmacSHA256(rawSignature, secretKey);
 
-
         // 2. Build request body
         Map<String, Object> requestBody = new LinkedHashMap<>();
         requestBody.put("partnerCode", partnerCode);
@@ -100,14 +105,20 @@ public class MoMoServiceImpl implements MoMoService {
                 .onStatus(status -> status.is4xxClientError(), clientResponse ->
                         clientResponse.bodyToMono(String.class)
                                 .doOnNext(body -> System.out.println("MoMo error response: " + body))
-                                .map(body -> new RuntimeException("MoMo 400: " + body))
+                                .map(body -> new ApiException(
+                                        ErrorCode.PAYMENT_GATEWAY_ERROR,
+                                        "MoMo trả về lỗi 400: " + body
+                                ))
                 )
                 .bodyToMono(Map.class)
                 .block();
 
         String payUrl = (String) response.get("payUrl");
         if (payUrl == null) {
-            throw new RuntimeException("Không thể tạo link thanh toán MoMo");
+            throw new ApiException(
+                    ErrorCode.PAYMENT_GATEWAY_ERROR,
+                    "Không thể tạo link thanh toán MoMo"
+            );
         }
 
         return payUrl;
@@ -122,12 +133,18 @@ public class MoMoServiceImpl implements MoMoService {
 
         // 1. Verify signature để chắc chắn request đến từ MoMo, không phải giả mạo
         if (!verifySignature(ipnData)) {
-            throw new RuntimeException("Invalid MoMo signature");
+            throw new ApiException(
+                    ErrorCode.INVALID_PAYMENT_SIGNATURE,
+                    "Chữ ký MoMo không hợp lệ"
+            );
         }
 
         // 2. Tìm transaction trong DB
         PaymentTransaction transaction = transactionRepository.findByOrderCode(orderCode)
-                .orElseThrow(() -> new RuntimeException("Transaction not found: " + orderCode));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.PAYMENT_TRANSACTION_NOT_FOUND,
+                        "Không tìm thấy giao dịch: " + orderCode
+                ));
 
         // 3. Cập nhật transaction
         transaction.setGatewayTransactionId(gatewayTransactionId);
@@ -152,13 +169,12 @@ public class MoMoServiceImpl implements MoMoService {
         User user = transaction.getUser();
         SubscriptionPlan plan = transaction.getPlan();
 
-        // Kiểm tra đã có subscription chưa
-        UserSubscription subscription = subscriptionRepository.findByUser(user)
+        UserSubscription subscription = subscriptionRepository
+                .findFirstByUserOrderByCreatedAtDesc(user)
                 .orElse(new UserSubscription());
 
         LocalDateTime startDate = LocalDateTime.now();
 
-        // Nếu đang còn hạn thì cộng thêm, không tính lại từ đầu
         if (subscription.getEndDate() != null && subscription.getEndDate().isAfter(startDate)) {
             startDate = subscription.getEndDate();
         }
@@ -176,6 +192,103 @@ public class MoMoServiceImpl implements MoMoService {
         }
 
         subscriptionRepository.save(subscription);
+    }
+
+    @Override
+    public MoMoRefundResponse refund(
+            String originalOrderId,
+            String originalTransId,
+            BigDecimal amount,
+            String reason
+    ) {
+        if (originalOrderId == null || originalOrderId.isBlank()) {
+            return MoMoRefundResponse.builder()
+                    .success(false)
+                    .pending(false)
+                    .message("Không tìm thấy orderId gốc để hoàn tiền")
+                    .build();
+        }
+
+        if (originalTransId == null || originalTransId.isBlank()) {
+            return MoMoRefundResponse.builder()
+                    .success(false)
+                    .pending(false)
+                    .message("Không tìm thấy transId MoMo gốc để hoàn tiền")
+                    .build();
+        }
+
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return MoMoRefundResponse.builder()
+                    .success(false)
+                    .pending(false)
+                    .message("Số tiền hoàn không hợp lệ")
+                    .build();
+        }
+
+        String requestId = UUID.randomUUID().toString();
+        String refundOrderId = "RF" + System.currentTimeMillis();
+        long refundAmount = amount.longValue();
+
+        String rawSignature = "accessKey=" + accessKey
+                + "&amount=" + refundAmount
+                + "&description=" + reason
+                + "&orderId=" + refundOrderId
+                + "&partnerCode=" + partnerCode
+                + "&requestId=" + requestId
+                + "&transId=" + originalTransId;
+
+        String signature = hmacSHA256(rawSignature, secretKey);
+
+        Map<String, Object> requestBody = new LinkedHashMap<>();
+        requestBody.put("partnerCode", partnerCode);
+        requestBody.put("orderId", refundOrderId);
+        requestBody.put("requestId", requestId);
+        requestBody.put("amount", refundAmount);
+        requestBody.put("transId", originalTransId);
+        requestBody.put("description", reason);
+        requestBody.put("signature", signature);
+        requestBody.put("lang", "vi");
+
+        Map response = webClientBuilder.build()
+                .post()
+                .uri(refundUrl)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+
+        if (response == null) {
+            return MoMoRefundResponse.builder()
+                    .success(false)
+                    .pending(false)
+                    .message("MoMo refund không có response")
+                    .build();
+        }
+
+        String resultCode = String.valueOf(response.get("resultCode"));
+        String message = String.valueOf(response.get("message"));
+        String refundTransId = response.get("transId") == null
+                ? null
+                : String.valueOf(response.get("transId"));
+
+        if ("0".equals(resultCode)) {
+            return MoMoRefundResponse.builder()
+                    .success(true)
+                    .pending(false)
+                    .refundTransactionId(refundTransId)
+                    .message(message)
+                    .rawResponse(response.toString())
+                    .build();
+        }
+
+        return MoMoRefundResponse.builder()
+                .success(false)
+                .pending(false)
+                .refundTransactionId(refundTransId)
+                .message(message)
+                .rawResponse(response.toString())
+                .build();
     }
 
     private boolean verifySignature(Map<String, String> ipnData) {
@@ -208,7 +321,10 @@ public class MoMoServiceImpl implements MoMoService {
             }
             return hex.toString();
         } catch (Exception e) {
-            throw new RuntimeException("HMAC-SHA256 error", e);
+            throw new ApiException(
+                    ErrorCode.INTERNAL_ERROR,
+                    "Lỗi tính toán chữ ký HMAC-SHA256"
+            );
         }
     }
 }

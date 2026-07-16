@@ -32,8 +32,10 @@ public class GeminiServiceImpl implements GeminiService {
     @Value("${gemini.api-key}")
     private String apiKey;
 
-    @Value("${gemini.api-url}")
-    private String apiUrl;
+//    @Value("${gemini.api-url}")
+//    private String apiUrl;
+    @Value("${gemini.model}")
+    private String geminiModel;
 
     @Value("${gemini.max-history}")
     private int maxHistory;
@@ -55,7 +57,14 @@ public class GeminiServiceImpl implements GeminiService {
 
         String aiResponse = webClientBuilder.build()
                 .post()
-                .uri(apiUrl + "?key=" + apiKey)
+//                .uri(apiUrl + "?key=" + apiKey)
+                .uri(uriBuilder -> uriBuilder
+                        .scheme("https")
+                        .host("generativelanguage.googleapis.com")
+                        .path("/v1beta/models/{model}:generateContent")
+                        .queryParam("key", apiKey)
+                        .build(geminiModel)
+                )
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(requestBody)
                 .retrieve()

@@ -3,6 +3,10 @@ package com.examp.genifit.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -18,7 +22,7 @@ public class UserSubscription {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer subscriptionId;
 
-    @OneToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
@@ -26,8 +30,7 @@ public class UserSubscription {
     @JoinColumn(name = "plan_id", nullable = false)
     private SubscriptionPlan subscriptionPlan;
 
-    // Transaction tạo ra subscription này (lần mua gần nhất)
-    @OneToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "transaction_id")
     private PaymentTransaction transaction;
 
@@ -50,6 +53,28 @@ public class UserSubscription {
 
     private LocalDateTime updatedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "refund_status")
+    private RefundStatus refundStatus;
+
+    @Column(name = "refund_amount", precision = 12, scale = 2)
+    private BigDecimal refundAmount;
+
+    @Column(name = "refund_percent")
+    private Integer refundPercent;
+
+    @Column(name = "refund_requested_at")
+    private LocalDateTime refundRequestedAt;
+
+    @Column(name = "refund_completed_at")
+    private LocalDateTime refundCompletedAt;
+
+    @Column(name = "refund_reason")
+    private String refundReason;
+
+    @Column(name = "refund_transaction_id")
+    private String refundTransactionId;
+
     @PrePersist
     public void onCreate() {
         createdAt = LocalDateTime.now();
@@ -69,6 +94,18 @@ public class UserSubscription {
 
         if (autoRenew == null) {
             autoRenew = false;
+        }
+
+        if (refundStatus == null) {
+            refundStatus = RefundStatus.NOT_ELIGIBLE;
+        }
+
+        if (refundAmount == null) {
+            refundAmount = BigDecimal.ZERO;
+        }
+
+        if (refundPercent == null) {
+            refundPercent = 0;
         }
     }
 

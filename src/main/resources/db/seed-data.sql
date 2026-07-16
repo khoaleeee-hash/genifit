@@ -1,4 +1,4 @@
-USE db_genifit;
+USE genifit_db;
 
 SET FOREIGN_KEY_CHECKS = 0;
 
@@ -10,10 +10,11 @@ DELETE FROM ai_scan_histories;
 DELETE FROM log_details;
 DELETE FROM daily_logs;
 DELETE FROM food_items;
-DELETE FROM advanced_profiles;
 DELETE FROM user_profiles;
 DELETE FROM guest;
 DELETE FROM users;
+DELETE FROM user_subscriptions;
+DELETE FROM subscription_plans;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -23,6 +24,160 @@ VALUES
     (1, 'khoa_member', 'khoa@gmail.com', '$2a$10$example_hash_member', 'MEMBER', NOW(), NOW()),
     (2, 'an_member', 'an@gmail.com', '$2a$10$example_hash_member2', 'MEMBER', NOW(), NOW()),
     (3, 'admin_genifit', 'admin@genifit.com', '$2a$10$example_hash_admin', 'ADMIN', NOW(), NOW());
+
+INSERT INTO subscription_plans
+(
+    plan_id,
+    plan_type,
+    plan_name,
+    description,
+    price,
+    duration_days,
+    ai_scan_limit_per_month,
+    meal_suggestion_limit_per_month,
+    reminder_limit,
+    max_members,
+    max_clients,
+    trial,
+    family_sharing_enabled,
+    coach_features_enabled,
+    meal_plan_enabled,
+    weekly_report_enabled,
+    monthly_report_enabled,
+    export_report_enabled,
+    macro_tracking_enabled,
+    calorie_deficit_tracking_enabled,
+    calorie_surplus_tracking_enabled,
+    blood_sugar_control_enabled,
+    active,
+    deleted,
+    created_at,
+    updated_at
+)
+VALUES
+    (
+        1,
+        'FREE',
+        'Free Plan',
+        'Basic calorie tracking for normal users',
+        0,
+        36500,
+        3,
+        3,
+        1,
+        1,
+        0,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        false,
+        true,
+        false,
+        NOW(),
+        NOW()
+    ),
+    (
+        2,
+        'PLUS',
+        'Plus Plan',
+        'Advanced tracking with AI assistance and meal planning',
+        49000,
+        30,
+        50,
+        50,
+        10,
+        1,
+        0,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        false,
+        true,
+        false,
+        NOW(),
+        NOW()
+    ),
+    (
+        3,
+        'PRO',
+        'Pro Plan',
+        'Full nutrition tracking, reports, sharing, and coach features',
+        99000,
+        30,
+        999999,
+        999999,
+        999999,
+        5,
+        50,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        NOW(),
+        NOW()
+    );
+
+INSERT INTO user_subscriptions
+(
+    subscription_id,
+    user_id,
+    plan_id,
+    start_date,
+    end_date,
+    status,
+    auto_renew,
+    cancelled_at,
+    created_at,
+    updated_at
+)
+VALUES
+    (
+        1,
+        1,
+        1,
+        NOW(),
+        DATE_ADD(NOW(), INTERVAL 100 YEAR),
+        'ACTIVE',
+        false,
+        NULL,
+        NOW(),
+        NOW()
+    ),
+    (
+        2,
+        2,
+        2,
+        NOW(),
+        DATE_ADD(NOW(), INTERVAL 30 DAY),
+        'ACTIVE',
+        true,
+        NULL,
+        NOW(),
+        NOW()
+    );
 
 INSERT INTO guest
 (guest_id, device_id, created_at, expired_at)
@@ -36,11 +191,11 @@ VALUES
     (1, 1, 170, 68, 21, 'MALE', 'LOSE_WEIGHT', 'MODERATE', 2100, NOW(), NOW()),
     (2, 2, 160, 50, 20, 'FEMALE', 'GAIN_WEIGHT', 'LIGHT', 1900, NOW(), NOW());
 
-INSERT INTO advanced_profiles
-(advanced_profile_id, user_id, medical_conditions, allergies, target_weight, target_date, daily_target_calorie, created_at, updated_at)
-VALUES
-    (1, 1, 'Không có bệnh nền nghiêm trọng', 'Dị ứng hải sản nhẹ', 62, '2026-09-01', 1800, NOW(), NOW()),
-    (2, 2, 'Huyết áp thấp', 'Không dị ứng', 55, '2026-10-01', 2200, NOW(), NOW());
+# INSERT INTO advanced_profiles
+# (advanced_profile_id, user_id, medical_conditions, allergies, target_weight, target_date, daily_target_calorie, created_at, updated_at)
+# VALUES
+#     (1, 1, 'Không có bệnh nền nghiêm trọng', 'Dị ứng hải sản nhẹ', 62, '2026-09-01', 1800, NOW(), NOW()),
+#     (2, 2, 'Huyết áp thấp', 'Không dị ứng', 55, '2026-10-01', 2200, NOW(), NOW());
 
 INSERT INTO food_items
 (food_id, food_name, calories, protein, carbs, fat, nutrition_info, created_by, created_at)
@@ -119,3 +274,5 @@ VALUES
     (2, 3, 'CREATE_FOOD_ITEM', 'food_items', 2, NOW()),
     (3, 3, 'VIEW_USER_STATISTICS', 'users', 1, NOW()),
     (4, 3, 'CHECK_AI_SCAN_HISTORY', 'ai_scan_histories', 1, NOW());
+
+

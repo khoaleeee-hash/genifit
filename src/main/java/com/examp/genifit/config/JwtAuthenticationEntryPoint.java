@@ -26,9 +26,13 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
                 "Xác thực thất bại",
                 apiError
         );
+
         response.setStatus(errorCode.getStatus().value());
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.getWriter().write(new ObjectMapper().writeValueAsString(apiResponse));
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE + ";charset=UTF-8");
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.findAndRegisterModules();
+
+        response.getWriter().write(mapper.writeValueAsString(apiResponse));
         response.flushBuffer();
     }
 }

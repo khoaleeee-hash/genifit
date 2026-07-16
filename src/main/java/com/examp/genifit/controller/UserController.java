@@ -24,6 +24,7 @@ import lombok.experimental.FieldDefaults;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import com.examp.genifit.dto.response.CancelSubscriptionResponse;
 
 import java.time.Instant;
 import java.util.List;
@@ -99,71 +100,6 @@ public class UserController {
         return ApiResponse.success(
                 "Suggest meals successfully",
                 geminiMealSuggestionService.suggestMealsFromIngredients(request)
-        );
-    }
-
-    @Operation
-            (summary = "User đăng kí gói")
-    @PostMapping("/subscribe")
-    public ApiResponse<UserSubscriptionResponse> subscribePlan(
-            @Valid @RequestBody SubscribePlanRequest request,
-            Authentication authentication
-    ) {
-        String username = authentication.getName();
-
-        UserSubscriptionResponse response =
-                subscriptionPlanService.subscribePlan(username, request);
-
-        return ApiResponse.<UserSubscriptionResponse>builder()
-                .success(true)
-                .message("Đăng kí gói thành công")
-                .data(response)
-                .timestamp(Instant.now())
-                .build();
-    }
-
-    @Operation(
-            summary = "Get my active subscription"
-    )
-    @GetMapping("/my-active")
-    public ApiResponse<UserSubscriptionResponse> getMyActiveSubscription() {
-        return ApiResponse.success(
-                "Get active subscription successfully",
-                userService.getMyActiveSubscription()
-        );
-    }
-
-    @Operation(
-            summary = "Get my subscription history"
-    )
-    @GetMapping("/my-history")
-    public ApiResponse<List<UserSubscriptionResponse>> getMySubscriptionHistory() {
-        return ApiResponse.success(
-                "Get subscription history successfully",
-                userService.getMySubscriptionHistory()
-        );
-    }
-
-    @Operation(
-            summary = "View my subscription plan"
-    )
-    @GetMapping("/my-plan")
-    public MySubscriptionResponse getMySubscription(Authentication authentication) {
-        String username = authentication.getName();
-
-        return subscriptionPlanService.getMySubscription(username);
-    }
-
-    @Operation(
-            summary = "Cancel current subscription"
-    )
-    @PatchMapping("/cancel-my-subscription")
-    public ApiResponse<String> cancelMySubscription() {
-        userService.cancelMySubscription();
-
-        return ApiResponse.success(
-                "Cancel subscription successfully",
-                "Subscription cancelled successfully"
         );
     }
 
