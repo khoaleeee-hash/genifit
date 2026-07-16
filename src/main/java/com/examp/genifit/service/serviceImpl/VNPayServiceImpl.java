@@ -67,8 +67,8 @@ public class VNPayServiceImpl implements VNPayService {
         params.put("vnp_ExpireDate", getExpireDateTime(15)); // hết hạn sau 15 phút
 
         // 2. Build query string và tính signature
-        String queryString = buildQueryString(params, false);
-        String signature = hmacSHA512(queryString, hashSecret);
+        String queryString = buildQueryString(params, true);
+        String signature = hmacSHA512(hashSecret, queryString);
         // Build URL với encoded string
         String encodedQuery = buildQueryString(params, true);
 
@@ -160,7 +160,7 @@ public class VNPayServiceImpl implements VNPayService {
     }
 
     // VNPay dùng HMAC-SHA512, khác MoMo dùng SHA256
-    private String hmacSHA512(String data, String key) {
+    private String hmacSHA512(String key, String data) {
         try {
             Mac mac = Mac.getInstance("HmacSHA512");
             mac.init(new SecretKeySpec(key.getBytes(StandardCharsets.UTF_8), "HmacSHA512"));
