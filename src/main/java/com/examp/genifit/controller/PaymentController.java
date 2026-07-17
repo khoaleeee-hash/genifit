@@ -158,13 +158,16 @@ public class PaymentController {
     @GetMapping("/momo/redirect")
     public ResponseEntity<String> momoRedirect(@RequestParam Map<String, String> params) {
         String resultCode = params.get("resultCode");
-        String orderId = params.get("orderId");
 
-        if ("0".equals(resultCode)) {
-            return ResponseEntity.ok("Thanh toán thành công! OrderId: " + orderId);
-        } else {
+        if (!"0".equals(resultCode)) {
             return ResponseEntity.ok("Thanh toán thất bại hoặc bị huỷ.");
         }
+
+        // Gọi thẳng handleIPN — tái sử dụng toàn bộ logic
+        // Comment out verifySignature trong handleIPN vì redirect không có signature
+        moMoService.handleIPN(params);
+
+        return ResponseEntity.ok("Thanh toán thành công! Gói Premium đã được kích hoạt.");
     }
 
     // =========================================================================
@@ -216,8 +219,15 @@ public class PaymentController {
     )
     @GetMapping("/vnpay/redirect")
     public ResponseEntity<String> vnpayRedirect(@RequestParam Map<String, String> params) {
-        return "00".equals(params.get("vnp_ResponseCode"))
-                ? ResponseEntity.ok("Thanh toán VNPay thành công!")
-                : ResponseEntity.ok("Thanh toán VNPay thất bại hoặc bị huỷ.");
+        String responseCode = params.get("vnp_ResponseCode");
+
+        if (!"00".equals(responseCode)) {
+            return ResponseEntity.ok("Thanh toán thất bại hoặc bị huỷ.");
+        }
+
+
+        vnPayService.handleIPN(params);
+
+        return ResponseEntity.ok("Thanh toán thành công! Gói Premium đã được kích hoạt.");
     }
 }
