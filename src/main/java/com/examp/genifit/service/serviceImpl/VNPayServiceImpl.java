@@ -5,6 +5,7 @@ import com.examp.genifit.common.exception.ErrorCode;
 import com.examp.genifit.entity.*;
 import com.examp.genifit.repository.PaymentTransactionRepository;
 import com.examp.genifit.repository.UserSubscriptionRepository;
+import com.examp.genifit.service.EmailService;
 import com.examp.genifit.service.VNPayService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +26,7 @@ import java.util.TreeMap;
 public class VNPayServiceImpl implements VNPayService {
     private final PaymentTransactionRepository transactionRepository;
     private final UserSubscriptionRepository subscriptionRepository;
+    private final EmailService emailService;
 
     @Value("${vnpay.tmn-code}")
     private String tmnCode;
@@ -157,6 +159,8 @@ public class VNPayServiceImpl implements VNPayService {
         }
 
         subscriptionRepository.save(subscription);
+        // Gửi email hóa đơn sau khi lưu subscription xong
+        emailService.sendInvoice(user, transaction, subscription);
     }
 
     // VNPay dùng HMAC-SHA512, khác MoMo dùng SHA256
