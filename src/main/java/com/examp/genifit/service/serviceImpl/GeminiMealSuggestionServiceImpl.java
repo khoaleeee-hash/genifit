@@ -150,7 +150,9 @@ public class GeminiMealSuggestionServiceImpl implements GeminiMealSuggestionServ
             );
 
         } catch (Exception e) {
-            throw new RuntimeException("Gemini trả về JSON không hợp lệ: " + e.getMessage());
+            throw new ApiException(
+                    ErrorCode.GEMINI_INVALID_JSON,
+                    "Gemini trả về JSON không hợp lệ: " + e.getMessage());
         }
     }
 
@@ -287,21 +289,27 @@ public class GeminiMealSuggestionServiceImpl implements GeminiMealSuggestionServ
 
             } catch (HttpServerErrorException.ServiceUnavailable e) {
                 if (attempt == maxRetries) {
-                    throw new RuntimeException("Gemini đang quá tải. Vui lòng thử lại sau.");
+                    throw new ApiException(
+                            ErrorCode.GEMINI_OVERLOADED,
+                            "Gemini đang quá tải. Vui lòng thử lại sau.");
                 }
 
                 sleepBeforeRetry(attempt);
 
             } catch (HttpClientErrorException.TooManyRequests e) {
                 if (attempt == maxRetries) {
-                    throw new RuntimeException("Gemini đang bị giới hạn request. Vui lòng thử lại sau.");
+                    throw new ApiException(
+                            ErrorCode.GEMINI_RATE_LIMITED,
+                            "Gemini đang bị giới hạn request. Vui lòng thử lại sau.");
                 }
 
                 sleepBeforeRetry(attempt);
             }
         }
 
-        throw new RuntimeException("Không gọi được Gemini");
+        throw new ApiException(
+                ErrorCode.GEMINI_CALL_FAILED,
+                "Không gọi được Gemini");
     }
 
     private void sleepBeforeRetry(int attempt) {
@@ -309,7 +317,9 @@ public class GeminiMealSuggestionServiceImpl implements GeminiMealSuggestionServ
             Thread.sleep(2000L * attempt);
         } catch (InterruptedException interruptedException) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Retry Gemini bị gián đoạn");
+            throw new ApiException(
+                    ErrorCode.GEMINI_RETRY_INTERRUPTED,
+                    "Retry Gemini bị gián đoạn");
         }
     }
 
@@ -326,13 +336,17 @@ public class GeminiMealSuggestionServiceImpl implements GeminiMealSuggestionServ
                     .path("text");
 
             if (textNode.isMissingNode() || textNode.asText().isBlank()) {
-                throw new RuntimeException("Gemini không trả về nội dung hợp lệ");
+                throw new ApiException(
+                        ErrorCode.GEMINI_INVALID_JSON,
+                        "Gemini không trả về nội dung hợp lệ");
             }
 
             return textNode.asText();
 
         } catch (Exception e) {
-            throw new RuntimeException("Không đọc được response từ Gemini: " + e.getMessage());
+            throw new ApiException(
+                    ErrorCode.GEMINI_INVALID_JSON,
+                    "Không đọc được response từ Gemini: " + e.getMessage());
         }
     }
 
@@ -397,24 +411,34 @@ public class GeminiMealSuggestionServiceImpl implements GeminiMealSuggestionServ
 
     private void validateRequest(GeminiMealSuggestionRequest request) {
         if (request.getUserId() == null && request.getGuestId() == null) {
-            throw new RuntimeException("Cần truyền userId hoặc guestId");
+            throw new ApiException(
+                    ErrorCode.USER_OR_GUEST_REQUIRED,
+                    "Cần truyền userId hoặc guestId");
         }
 
         if (request.getUserId() != null && request.getGuestId() != null) {
-            throw new RuntimeException("Chỉ được truyền userId hoặc guestId, không truyền cả hai");
+            throw new ApiException(
+                    ErrorCode.USER_GUEST_CONFLICT,
+                    "Chỉ được truyền userId hoặc guestId, không truyền cả hai");
         }
 
         if (request.getIngredients() == null || request.getIngredients().isEmpty()) {
-            throw new RuntimeException("Cần nhập ít nhất một nguyên liệu");
+            throw new ApiException(
+                    ErrorCode.INGREDIENT_REQUIRED,
+                    "Cần nhập ít nhất một nguyên liệu");
         }
 
         for (IngredientRequest ingredient : request.getIngredients()) {
             if (ingredient.getIngredient() == null || ingredient.getIngredient().trim().isEmpty()) {
-                throw new RuntimeException("Tên nguyên liệu không được để trống");
+                throw new ApiException(
+                        ErrorCode.INGREDIENT_NAME_REQUIRED,
+                        "Tên nguyên liệu không được để trống");
             }
 
             if (ingredient.getQuantity() != null && ingredient.getQuantity() < 0) {
-                throw new RuntimeException("Số lượng nguyên liệu không hợp lệ");
+                throw new ApiException(
+                        ErrorCode.INVALID_INGREDIENT_QUANTITY,
+                        "Số lượng nguyên liệu không hợp lệ");
             }
         }
     }

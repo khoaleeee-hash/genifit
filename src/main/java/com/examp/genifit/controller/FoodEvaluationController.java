@@ -1,5 +1,7 @@
 package com.examp.genifit.controller;
 
+import com.examp.genifit.common.exception.ApiException;
+import com.examp.genifit.common.exception.ErrorCode;
 import com.examp.genifit.common.response.ApiResponse;
 import com.examp.genifit.dto.request.FoodEvaluationRequest;
 import com.examp.genifit.dto.response.FoodEvaluationResponse;
@@ -84,13 +86,19 @@ public ResponseEntity<ApiResponse<FoodEvaluationResponse>> scanAndEvaluate(
 ) {
     try {
         if (image == null || image.isEmpty()) {
-            throw new RuntimeException("Image file is required");
+            throw new ApiException(
+                    ErrorCode.INVALID_CALORIE_VALUE,
+                    "Image file is required"
+            );
         }
 
         Integer userId = getCurrentUserIdOrNull();
 
         if (userId == null && guestId == null) {
-            throw new RuntimeException("Please login or provide guestId");
+            throw new ApiException(
+                    ErrorCode.USER_NOT_FOUND,
+                    "Please login or provide guestId"
+            );
         }
 
         if (userId != null) {
@@ -134,7 +142,10 @@ public ResponseEntity<ApiResponse<FoodEvaluationResponse>> scanAndEvaluate(
         }
 
         if (request.getUserId() == null && request.getGuestId() == null) {
-            throw new RuntimeException("Please login or provide guestId");
+            throw new ApiException(
+                    ErrorCode.USER_NOT_FOUND,
+                    "Please login or provide guestId"
+            );
         }
 
         return foodEvaluationService.evaluateScannedFood(request);

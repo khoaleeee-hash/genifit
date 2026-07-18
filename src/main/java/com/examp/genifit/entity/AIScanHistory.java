@@ -18,18 +18,18 @@ public class AIScanHistory {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer scanId;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "guest_id")
     private Guest guest;
 
     @Column(length = 255)
     private String imageUrl;
 
-    @Column(length = 150)
+    @Column(length = 500)
     private String detectedFood;
 
     private Double estimatedCalories;
@@ -56,6 +56,8 @@ public class AIScanHistory {
 
     @PrePersist
     public void onCreate() {
-        createdAt = LocalDateTime.now();
+        if(createdAt == null){
+            createdAt = LocalDateTime.now();
+        }
     }
 }

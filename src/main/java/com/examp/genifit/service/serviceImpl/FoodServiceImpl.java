@@ -1,5 +1,7 @@
 package com.examp.genifit.service.serviceImpl;
 
+import com.examp.genifit.common.exception.ApiException;
+import com.examp.genifit.common.exception.ErrorCode;
 import com.examp.genifit.dto.request.CreateAdminFoodRequest;
 import com.examp.genifit.dto.request.FoodFilterRequest;
 import com.examp.genifit.dto.request.UpdateFoodRequest;
@@ -150,10 +152,14 @@ public class FoodServiceImpl implements FoodService {
         validateCreateFood(request);
 
         User admin = userRepository.findById(request.getAdminId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy admin"));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.ADMIN_NOT_FOUND,
+                        "Không tìm thấy admin"));
 
         if (admin.getRole() != UserRole.ADMIN) {
-            throw new RuntimeException("Chỉ admin mới được tạo món ăn chuẩn");
+            throw new ApiException(
+                    ErrorCode.ADMIN_REQUIRED,
+                    "Chỉ admin mới được tạo món ăn chuẩn");
         }
 
         foodItemRepository
@@ -162,7 +168,9 @@ public class FoodServiceImpl implements FoodService {
                         FoodApprovalStatus.APPROVED
                 )
                 .ifPresent(food -> {
-                    throw new RuntimeException("Món ăn này đã tồn tại trong danh sách món chuẩn");
+                    throw new ApiException(
+                            ErrorCode.FOOD_ALREADY_EXISTS,
+                            "Món ăn này đã tồn tại trong danh sách món chuẩn");
                 });
 
         FoodItem foodItem = new FoodItem();
@@ -186,7 +194,9 @@ public class FoodServiceImpl implements FoodService {
     public FoodResponse updateFood(Integer foodId, UpdateFoodRequest request) {
 
         FoodItem foodItem = foodItemRepository.findByFoodIdAndDeletedFalse(foodId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn"));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.FOOD_NOT_FOUND,
+                        "Không tìm thấy món ăn"));
 
         validateUpdateFood(request);
 
@@ -230,10 +240,14 @@ public class FoodServiceImpl implements FoodService {
     @Override
     public void softDeleteFood(Integer foodId) {
         FoodItem foodItem = foodItemRepository.findById(foodId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn"));
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.FOOD_NOT_FOUND,
+                        "Không tìm thấy món ăn"));
 
         if (Boolean.TRUE.equals(foodItem.getDeleted())) {
-            throw new RuntimeException("Món ăn này đã được xoá trước đó");
+            throw new ApiException(
+                    ErrorCode.FOOD_ALREADY_EXISTS,
+                    "Món ăn này đã được xoá trước đó");
         }
 
         foodItem.setDeleted(true);
@@ -250,7 +264,9 @@ public class FoodServiceImpl implements FoodService {
         try {
             return Integer.parseInt(value.trim());
         } catch (NumberFormatException e) {
-            throw new RuntimeException("Giá trị số nguyên không hợp lệ: " + value);
+            throw new ApiException(
+                    ErrorCode.INVALID_INTEGER_VALUE,
+                    "Giá trị số nguyên không hợp lệ: " + value);
         }
     }
 
@@ -262,7 +278,9 @@ public class FoodServiceImpl implements FoodService {
         try {
             return Double.parseDouble(value.trim());
         } catch (NumberFormatException e) {
-            throw new RuntimeException("Giá trị số thực không hợp lệ: " + value);
+            throw new ApiException(
+                    ErrorCode.INVALID_DECIMAL_VALUE,
+                    "Giá trị số thực không hợp lệ: " + value);
         }
     }
 
@@ -281,7 +299,10 @@ public class FoodServiceImpl implements FoodService {
             return false;
         }
 
-        throw new RuntimeException("Giá trị boolean không hợp lệ, chỉ được nhập true hoặc false: " + value);
+        throw new ApiException(
+                ErrorCode.INVALID_BOOLEAN_VALUE,
+                "Giá trị boolean không hợp lệ, chỉ được nhập true hoặc false: " + value
+        );
     }
 
     private boolean isBlankOrSwaggerDefault(String value) {
@@ -292,45 +313,65 @@ public class FoodServiceImpl implements FoodService {
 
     private void validateCreateFood(CreateAdminFoodRequest request) {
         if (request.getAdminId() == null) {
-            throw new RuntimeException("AdminId không được để trống");
+            throw new ApiException(
+                    ErrorCode.ADMIN_ID_REQUIRED,
+                    "AdminId không được để trống");
         }
 
         if (request.getFoodName() == null || request.getFoodName().trim().isEmpty()) {
-            throw new RuntimeException("Tên món ăn không được để trống");
+            throw new ApiException(
+                    ErrorCode.FOOD_NAME_REQUIRED,
+                    "Tên món ăn không được để trống");
         }
 
         if (request.getCalories() == null || request.getCalories() < 0) {
-            throw new RuntimeException("Calories không hợp lệ");
+            throw new ApiException(
+                    ErrorCode.INVALID_FOOD_CALORIES,
+                    "Calories không hợp lệ");
         }
 
         if (request.getProtein() != null && request.getProtein() < 0) {
-            throw new RuntimeException("Protein không hợp lệ");
+            throw new ApiException(
+                    ErrorCode.INVALID_FOOD_PROTEIN,
+                    "Protein không hợp lệ");
         }
 
         if (request.getCarbs() != null && request.getCarbs() < 0) {
-            throw new RuntimeException("Carbs không hợp lệ");
+            throw new ApiException(
+                    ErrorCode.INVALID_FOOD_CARBS,
+                    "Carbs không hợp lệ");
         }
 
         if (request.getFat() != null && request.getFat() < 0) {
-            throw new RuntimeException("Fat không hợp lệ");
+            throw new ApiException(
+                    ErrorCode.INVALID_FOOD_FAT,
+                    "Fat không hợp lệ");
         }
     }
 
     private void validateUpdateFood(UpdateFoodRequest request) {
         if (request.getCalories() != null && request.getCalories() < 0) {
-            throw new RuntimeException("Calories không hợp lệ");
+            throw new ApiException(
+                    ErrorCode.INVALID_FOOD_CALORIES,
+                    "Calories không hợp lệ");
         }
 
         if (request.getProtein() != null && request.getProtein() < 0) {
-            throw new RuntimeException("Protein không hợp lệ");
+            throw new ApiException(
+                    ErrorCode.INVALID_FOOD_PROTEIN,
+                    "Protein không hợp lệ");
         }
 
         if (request.getCarbs() != null && request.getCarbs() < 0) {
-            throw new RuntimeException("Carbs không hợp lệ");
+            throw new ApiException(
+                    ErrorCode.INVALID_FOOD_CARBS,
+                    "Carbs không hợp lệ");
         }
 
         if (request.getFat() != null && request.getFat() < 0) {
-            throw new RuntimeException("Fat không hợp lệ");
+            throw new ApiException(
+                    ErrorCode.INVALID_FOOD_FAT,
+                    "Fat không hợp lệ");
         }
     }
 
