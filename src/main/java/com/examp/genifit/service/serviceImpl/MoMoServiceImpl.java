@@ -7,6 +7,7 @@ import com.examp.genifit.entity.*;
 import com.examp.genifit.repository.PaymentTransactionRepository;
 import com.examp.genifit.repository.SubscriptionPlanRepository;
 import com.examp.genifit.repository.UserSubscriptionRepository;
+import com.examp.genifit.service.EmailService;
 import com.examp.genifit.service.MoMoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,7 +30,7 @@ public class MoMoServiceImpl implements MoMoService {
     private final WebClient.Builder webClientBuilder;
     private final PaymentTransactionRepository transactionRepository;
     private final UserSubscriptionRepository subscriptionRepository;
-    private final SubscriptionPlanRepository planRepository;
+    private final EmailService emailService;
 
     @Value("${momo.refund-url}")
     private String refundUrl;
@@ -192,6 +193,8 @@ public class MoMoServiceImpl implements MoMoService {
         }
 
         subscriptionRepository.save(subscription);
+        // Gửi email hóa đơn sau khi lưu subscription xong
+        emailService.sendInvoice(user, transaction, subscription);
     }
 
     @Override

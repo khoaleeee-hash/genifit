@@ -23,6 +23,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -103,43 +104,6 @@ public class PaymentController {
         );
     }
 
-    // =========================================================================
-    // MOMO IPN CALLBACK (Server-to-server, KHÔNG dành cho FE)
-    // =========================================================================
-
-    @Hidden
-    @Operation(
-            summary = "[INTERNAL - MoMo Server gọi] Xác nhận kết quả thanh toán MoMo",
-            description = "Cấu hình trong `momo.ipn-url`. Chỉ MoMo server gọi, tuyệt đối không phải FE."
-    )
-    @PostMapping("/momo/ipn")
-    public ResponseEntity<Map<String, Object>> momoIPN(@RequestBody Map<String, String> ipnData) {
-        try {
-            moMoService.handleIPN(ipnData);
-            return ResponseEntity.ok(momoResponse(0, "Confirm Success"));
-        } catch (ApiException ex) {
-            log.warn("MoMo IPN business error: {}", ex.getMessage());
-            return ResponseEntity.ok(momoResponse(mapMomoErrorCode(ex), ex.getMessage()));
-        } catch (Exception ex) {
-            log.error("MoMo IPN unexpected error", ex);
-            return ResponseEntity.ok(momoResponse(99, "Unknown error"));
-        }
-    }
-
-    private Map<String, Object> momoResponse(int resultCode, String message) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("resultCode", resultCode);
-        body.put("message", message);
-        return body;
-    }
-
-    private int mapMomoErrorCode(ApiException ex) {
-        return switch (ex.getErrorCode()) {
-            case INVALID_PAYMENT_SIGNATURE -> 97;
-            case PAYMENT_TRANSACTION_NOT_FOUND -> 1;
-            default -> 99;
-        };
-    }
 
     // =========================================================================
     // MOMO REDIRECT (trình duyệt tự điều hướng, KHÔNG phải API cho FE gọi bằng AJAX)
@@ -156,61 +120,22 @@ public class PaymentController {
                     """
     )
     @GetMapping("/momo/redirect")
-    public ResponseEntity<String> momoRedirect(@RequestParam Map<String, String> params) {
+    public ResponseEntity<Void> momoRedirect(@RequestParam Map<String, String> params) {
         String resultCode = params.get("resultCode");
 
-        if (!"0".equals(resultCode)) {
-            return ResponseEntity.ok("Thanh toán thất bại hoặc bị huỷ.");
+        if ("0".equals(resultCode)) {
+            moMoService.handleIPN(params);
+            // Redirect về Gmail để user xem hóa đơn
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .location(URI.create("https://mail.google.com/mail/u/0/#inbox"))
+                    .build();
         }
 
-        // Gọi thẳng handleIPN — tái sử dụng toàn bộ logic
-        // Comment out verifySignature trong handleIPN vì redirect không có signature
-        moMoService.handleIPN(params);
-
-        return ResponseEntity.ok("Thanh toán thành công! Gói Premium đã được kích hoạt.");
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .location(URI.create("https://mail.google.com/mail/u/0/#inbox"))
+                .build();
     }
 
-    // =========================================================================
-    // VNPAY IPN CALLBACK
-    // =========================================================================
-
-    @Hidden
-    @Operation(
-            summary = "[INTERNAL - VNPay Server gọi] Xác nhận kết quả thanh toán VNPay",
-            description = "Cấu hình trong `vnpay.ipn-url`. Chỉ VNPay server gọi, tuyệt đối không phải FE."
-    )
-    @GetMapping("/vnpay/ipn")
-    public ResponseEntity<Map<String, String>> vnpayIPN(@RequestParam Map<String, String> params) {
-        try {
-            vnPayService.handleIPN(params);
-            return ResponseEntity.ok(vnpayResponse("00", "Confirm Success"));
-        } catch (ApiException ex) {
-            log.warn("VNPay IPN business error: {}", ex.getMessage());
-            return ResponseEntity.ok(vnpayResponse(mapVnpayErrorCode(ex), ex.getMessage()));
-        } catch (Exception ex) {
-            log.error("VNPay IPN unexpected error", ex);
-            return ResponseEntity.ok(vnpayResponse("99", "Unknown error"));
-        }
-    }
-
-    private Map<String, String> vnpayResponse(String rspCode, String message) {
-        Map<String, String> body = new LinkedHashMap<>();
-        body.put("RspCode", rspCode);
-        body.put("Message", message);
-        return body;
-    }
-
-    private String mapVnpayErrorCode(ApiException ex) {
-        return switch (ex.getErrorCode()) {
-            case INVALID_PAYMENT_SIGNATURE -> "97";
-            case PAYMENT_TRANSACTION_NOT_FOUND -> "01";
-            default -> "99";
-        };
-    }
-
-    // =========================================================================
-    // VNPAY REDIRECT
-    // =========================================================================
 
     @Hidden
     @Operation(
