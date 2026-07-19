@@ -19,6 +19,7 @@ import com.examp.genifit.entity.*;
 import com.examp.genifit.repository.SubscriptionPlanRepository;
 import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.repository.UserSubscriptionRepository;
+import com.examp.genifit.service.CloudinaryService;
 import com.examp.genifit.service.EmailService;
 import com.examp.genifit.service.MoMoService;
 import com.examp.genifit.service.UserService;
@@ -32,10 +33,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
-import java.time.Duration;
-import java.math.RoundingMode;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -50,6 +50,7 @@ public class UserServiceImpl implements UserService {
 
     private final UserSubscriptionRepository userSubscriptionRepository;
     private final SubscriptionPlanRepository subscriptionPlanRepository;
+    private final CloudinaryService cloudinaryService;
 
     UserRepository userRepository;
     OtpTokenRepository otpTokenRepository;
@@ -408,5 +409,29 @@ public class UserServiceImpl implements UserService {
             BigDecimal refundAmount,
             String message
     ) {
+    }
+
+    @Override
+    @Transactional
+    public String uploadAvatar(MultipartFile file) {
+        var context = SecurityContextHolder.getContext();
+        String currentUsername = context.getAuthentication().getName();
+
+        User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+
+        UserProfile profile = userProfileRepository.findByUser(user)
+                .orElse(new UserProfile());
+        profile.setUser(user);
+
+        try {
+            String imageUrl = cloudinaryService.uploadImage(file, "genifit/avatars");
+            profile.setAvatarUrl(imageUrl);
+            userProfileRepository.save(profile);
+            return imageUrl;
+        } catch (Exception e) {
+            log.error("Lỗi khi upload avatar", e);
+            throw new RuntimeException("Không thể tải ảnh lên, vui lòng thử lại sau!");
+        }
     }
 }

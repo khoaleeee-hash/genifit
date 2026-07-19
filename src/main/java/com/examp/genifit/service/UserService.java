@@ -9,6 +9,7 @@ import com.examp.genifit.dto.response.CancelSubscriptionResponse;
 import com.examp.genifit.dto.response.UserProfileResponse;
 import com.examp.genifit.dto.response.UserResponse;
 import com.examp.genifit.dto.response.UserSubscriptionResponse;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -26,7 +27,7 @@ public interface UserService {
     void deleteUserById(Integer id);
     void generateAndSendOtpForForgotPassword(String email);
     UserProfileResponse updateMyProfile(UpdateUserProfileRequest request);
-
+    String uploadAvatar(MultipartFile file);
     UserSubscriptionResponse assignSubscription(AssignSubscriptionRequest request);
 
 }

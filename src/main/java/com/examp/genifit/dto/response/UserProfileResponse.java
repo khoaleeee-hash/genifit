@@ -30,4 +30,5 @@ public class UserProfileResponse {
     LocalDate targetDate;
     List<String> medicalConditions;
     List<String> allergies;
+    String avatarUrl;
 }
