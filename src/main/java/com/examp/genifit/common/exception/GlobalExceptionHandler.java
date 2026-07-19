@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.Instant;
@@ -130,6 +131,31 @@ public class GlobalExceptionHandler {
                 .body(buildResponse("Resource not found", error));
     }
 
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Object>> handleMaxSizeException(
+            MaxUploadSizeExceededException ex,
+            HttpServletRequest request
+    ) {
+        // Dùng log.warn thay vì log.error để không bị báo đỏ console, chỉ ghi nhận lại thôi
+        log.warn(
+                "Upload size exceeded at [{}]: {}",
+                request.getRequestURI(),
+                ex.getMessage()
+        );
+
+        String message = "Dung lượng ảnh tải lên quá lớn. Vui lòng chọn ảnh dưới 5MB.";
+
+        ApiError error = ApiError.builder()
+                .code("PAYLOAD_TOO_LARGE")
+                .message(message)
+                .path(request.getRequestURI())
+                .build();
+
+        return ResponseEntity
+                .status(HttpStatus.PAYLOAD_TOO_LARGE) // Trả về HTTP 413
+                .body(buildResponse(message, error));
+    }
+
     /* Unexpected exception */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleException(
@@ -158,4 +184,5 @@ public class GlobalExceptionHandler {
                         )
                 );
     }
+
 }

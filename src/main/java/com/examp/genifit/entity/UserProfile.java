@@ -29,6 +29,9 @@ public class UserProfile {
 
     private Double weightKg;
 
+    @Column(name = "avatar_url")
+    private String avatarUrl;
+
     private Integer age;
 
     private String firstName;

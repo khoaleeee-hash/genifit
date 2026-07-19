@@ -21,10 +21,14 @@ import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import com.examp.genifit.dto.response.CancelSubscriptionResponse;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.List;
@@ -165,5 +169,29 @@ public class UserController {
                 "Account upgraded successfully! Legacy data has been synchronized.",
                 authenticationService.upgradeGuestToMember(request)
         );
+    }
+
+    @PostMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload user avatar")
+    public ResponseEntity<ApiResponse<String>> uploadAvatar(
+            @RequestPart("image") MultipartFile image,
+            Authentication authentication
+    ) {
+        try {
+            if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(ApiResponse.fail("Authentication is required to upload avatar", null));
+            }
+
+            if (image == null || image.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(ApiResponse.fail("Image file is required", null));
+            }
+            String avatarUrl = userService.uploadAvatar(image);
+            return ResponseEntity.ok(ApiResponse.success("Avatar updated successfully", avatarUrl));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(e.getMessage(), null));
+        }
     }
 }
