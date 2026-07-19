@@ -27,7 +27,7 @@ public interface UserService {
     void deleteUserById(Integer id);
     void generateAndSendOtpForForgotPassword(String email);
     UserProfileResponse updateMyProfile(UpdateUserProfileRequest request);
-    String uploadAvatar(MultipartFile file);
+    void updateAvatarUrl(String avatarUrl);
     UserSubscriptionResponse assignSubscription(AssignSubscriptionRequest request);
 
 }

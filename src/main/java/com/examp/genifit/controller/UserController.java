@@ -32,6 +32,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/users")
@@ -171,27 +172,17 @@ public class UserController {
         );
     }
 
-    @PostMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Upload user avatar")
-    public ResponseEntity<ApiResponse<String>> uploadAvatar(
-            @RequestPart("image") MultipartFile image,
+    @PutMapping("/me/avatar")
+    @Operation(summary = "Update user avatar URL")
+    public ResponseEntity<ApiResponse<String>> saveAvatarUrl(
+            @Valid @RequestBody UpdateAvatarRequest request,
             Authentication authentication
     ) {
-        try {
-            if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(ApiResponse.fail("Authentication is required to upload avatar", null));
-            }
-
-            if (image == null || image.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body(ApiResponse.fail("Image file is required", null));
-            }
-            String avatarUrl = userService.uploadAvatar(image);
-            return ResponseEntity.ok(ApiResponse.success("Avatar updated successfully", avatarUrl));
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.fail(e.getMessage(), null));
+        if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.fail("Authentication is required to update avatar", null));
         }
+        userService.updateAvatarUrl(request.getAvatarUrl());
+        return ResponseEntity.ok(ApiResponse.success("Avatar updated successfully", request.getAvatarUrl()));
     }
 }

@@ -19,7 +19,6 @@ import com.examp.genifit.entity.*;
 import com.examp.genifit.repository.SubscriptionPlanRepository;
 import com.examp.genifit.repository.UserRepository;
 import com.examp.genifit.repository.UserSubscriptionRepository;
-import com.examp.genifit.service.CloudinaryService;
 import com.examp.genifit.service.EmailService;
 import com.examp.genifit.service.MoMoService;
 import com.examp.genifit.service.UserService;
@@ -33,8 +32,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
-
 import java.math.BigDecimal;
 
 import java.time.LocalDate;
@@ -50,7 +47,6 @@ public class UserServiceImpl implements UserService {
 
     private final UserSubscriptionRepository userSubscriptionRepository;
     private final SubscriptionPlanRepository subscriptionPlanRepository;
-    private final CloudinaryService cloudinaryService;
 
     UserRepository userRepository;
     OtpTokenRepository otpTokenRepository;
@@ -413,7 +409,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    public String uploadAvatar(MultipartFile file) {
+    public void updateAvatarUrl(String avatarUrl) {
         var context = SecurityContextHolder.getContext();
         String currentUsername = context.getAuthentication().getName();
 
@@ -423,15 +419,9 @@ public class UserServiceImpl implements UserService {
         UserProfile profile = userProfileRepository.findByUser(user)
                 .orElse(new UserProfile());
         profile.setUser(user);
+        profile.setAvatarUrl(avatarUrl);
 
-        try {
-            String imageUrl = cloudinaryService.uploadImage(file, "genifit/avatars");
-            profile.setAvatarUrl(imageUrl);
-            userProfileRepository.save(profile);
-            return imageUrl;
-        } catch (Exception e) {
-            log.error("Lỗi khi upload avatar", e);
-            throw new RuntimeException("Không thể tải ảnh lên, vui lòng thử lại sau!");
-        }
+        userProfileRepository.save(profile);
     }
+
 }
