@@ -195,12 +195,11 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
             return initiatePaidSubscription(username, plan, method);
         }
 
-        subscription.setEndDate(
-                calculateRenewEndDate(subscription.getEndDate(), plan.getDurationDays())
+        UserSubscriptionResponse response = replaceActiveSubscription(
+                subscription,
+                plan,
+                subscription.getAutoRenew()
         );
-
-        UserSubscriptionResponse response =
-                userSubscriptionMapper.toResponse(userSubscriptionRepository.save(subscription));
 
         return SubscribePlanResponse.builder()
                 .requiresPayment(false)
@@ -365,24 +364,45 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
             throw new ApiException(ErrorCode.INVALID_SUBSCRIPTION_REQUEST, "Bạn đang sử dụng gói khác.");
         }
 
-        current.setEndDate(calculateRenewEndDate(current.getEndDate(), plan.getDurationDays()));
-        current.setAutoRenew(Boolean.TRUE.equals(request.getAutoRenew()));
-
-        return userSubscriptionMapper.toResponse(userSubscriptionRepository.save(current));
+        return replaceActiveSubscription(
+                current,
+                plan,
+                Boolean.TRUE.equals(request.getAutoRenew())
+        );
     }
 
     private UserSubscriptionResponse createNewSubscription(
             User user, SubscriptionPlan plan, SubscribePlanRequest request
     ) {
-        LocalDateTime now = LocalDateTime.now();
+        return createNewSubscription(user, plan, Boolean.TRUE.equals(request.getAutoRenew()));
+    }
 
+    private UserSubscriptionResponse replaceActiveSubscription(
+            UserSubscription current,
+            SubscriptionPlan plan,
+            Boolean autoRenew
+    ) {
+        current.setStatus(SubscriptionStatus.CANCELLED);
+        current.setCancelledAt(LocalDateTime.now());
+        current.setAutoRenew(false);
+        userSubscriptionRepository.save(current);
+
+        return createNewSubscription(current.getUser(), plan, autoRenew);
+    }
+
+    private UserSubscriptionResponse createNewSubscription(
+            User user,
+            SubscriptionPlan plan,
+            Boolean autoRenew
+    ) {
+        LocalDateTime now = LocalDateTime.now();
         UserSubscription subscription = UserSubscription.builder()
                 .user(user)
                 .subscriptionPlan(plan)
                 .startDate(now)
                 .endDate(now.plusDays(plan.getDurationDays()))
                 .status(SubscriptionStatus.ACTIVE)
-                .autoRenew(Boolean.TRUE.equals(request.getAutoRenew()))
+                .autoRenew(Boolean.TRUE.equals(autoRenew))
                 .build();
 
         return userSubscriptionMapper.toResponse(userSubscriptionRepository.save(subscription));
@@ -478,10 +498,4 @@ public class SubscriptionPlanServiceImpl implements SubscriptionPlanService {
         return PageRequest.of(pageNum - 1, pageSize, Sort.by(Sort.Direction.ASC, "price").and(Sort.by("planId")));
     }
 
-    private LocalDateTime calculateRenewEndDate(LocalDateTime currentEndDate, Integer durationDays) {
-        LocalDateTime base = (currentEndDate != null && currentEndDate.isAfter(LocalDateTime.now()))
-                ? currentEndDate
-                : LocalDateTime.now();
-        return base.plusDays(durationDays);
-    }
 }

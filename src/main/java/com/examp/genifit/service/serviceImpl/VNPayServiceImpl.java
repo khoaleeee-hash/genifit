@@ -109,6 +109,10 @@ public class VNPayServiceImpl implements VNPayService {
         transaction.setUpdatedAt(LocalDateTime.now());
 
         if ("00".equals(responseCode)) {
+            if (transaction.getStatus() == PaymentTransaction.PaymentStatus.SUCCESS) {
+                return;
+            }
+
             // "00" = thành công theo VNPay spec
             transaction.setStatus(PaymentTransaction.PaymentStatus.SUCCESS);
             transactionRepository.save(transaction);
@@ -136,30 +140,28 @@ public class VNPayServiceImpl implements VNPayService {
     private void activateSubscription(PaymentTransaction transaction) {
         User user = transaction.getUser();
         SubscriptionPlan plan = transaction.getPlan();
+        LocalDateTime now = LocalDateTime.now();
 
-        UserSubscription subscription = subscriptionRepository
-                .findFirstByUserOrderByCreatedAtDesc(user)
-                .orElse(new UserSubscription());
+        subscriptionRepository
+                .findFirstByUserAndStatusOrderByEndDateDesc(user, SubscriptionStatus.ACTIVE)
+                .ifPresent(current -> {
+                    current.setStatus(SubscriptionStatus.CANCELLED);
+                    current.setCancelledAt(now);
+                    current.setAutoRenew(false);
+                    subscriptionRepository.save(current);
+                });
 
-        LocalDateTime startDate = LocalDateTime.now();
-        if (subscription.getEndDate() != null && subscription.getEndDate().isAfter(startDate)) {
-            startDate = subscription.getEndDate();
-        }
-
-        subscription.setUser(user);
-        subscription.setSubscriptionPlan(plan);
-        subscription.setTransaction(transaction);
-        subscription.setStartDate(LocalDateTime.now());
-        subscription.setEndDate(startDate.plusDays(plan.getDurationDays()));
-        subscription.setStatus(SubscriptionStatus.ACTIVE);
-        subscription.setUpdatedAt(LocalDateTime.now());
-
-        if (subscription.getCreatedAt() == null) {
-            subscription.setCreatedAt(LocalDateTime.now());
-        }
+        UserSubscription subscription = UserSubscription.builder()
+                .user(user)
+                .subscriptionPlan(plan)
+                .transaction(transaction)
+                .startDate(now)
+                .endDate(now.plusDays(plan.getDurationDays()))
+                .status(SubscriptionStatus.ACTIVE)
+                .autoRenew(false)
+                .build();
 
         subscriptionRepository.save(subscription);
-        // Gửi email hóa đơn sau khi lưu subscription xong
         emailService.sendInvoice(user, transaction, subscription);
     }
 

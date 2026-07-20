@@ -153,11 +153,15 @@ public class MoMoServiceImpl implements MoMoService {
         transaction.setUpdatedAt(LocalDateTime.now());
 
         if ("0".equals(resultCode)) {
+            if (transaction.getStatus() == PaymentTransaction.PaymentStatus.SUCCESS) {
+                return;
+            }
+
             // Thanh toán thành công
             transaction.setStatus(PaymentTransaction.PaymentStatus.SUCCESS);
             transactionRepository.save(transaction);
 
-            // 4. Tạo hoặc gia hạn UserSubscription
+            // 4. Kích hoạt gói mới từ thời điểm thanh toán
             activateSubscription(transaction);
         } else {
             // Thanh toán thất bại
@@ -169,31 +173,28 @@ public class MoMoServiceImpl implements MoMoService {
     private void activateSubscription(PaymentTransaction transaction) {
         User user = transaction.getUser();
         SubscriptionPlan plan = transaction.getPlan();
+        LocalDateTime now = LocalDateTime.now();
 
-        UserSubscription subscription = subscriptionRepository
-                .findFirstByUserOrderByCreatedAtDesc(user)
-                .orElse(new UserSubscription());
+        subscriptionRepository
+                .findFirstByUserAndStatusOrderByEndDateDesc(user, SubscriptionStatus.ACTIVE)
+                .ifPresent(current -> {
+                    current.setStatus(SubscriptionStatus.CANCELLED);
+                    current.setCancelledAt(now);
+                    current.setAutoRenew(false);
+                    subscriptionRepository.save(current);
+                });
 
-        LocalDateTime startDate = LocalDateTime.now();
-
-        if (subscription.getEndDate() != null && subscription.getEndDate().isAfter(startDate)) {
-            startDate = subscription.getEndDate();
-        }
-
-        subscription.setUser(user);
-        subscription.setSubscriptionPlan(plan);
-        subscription.setTransaction(transaction);
-        subscription.setStartDate(LocalDateTime.now());
-        subscription.setEndDate(startDate.plusDays(plan.getDurationDays()));
-        subscription.setStatus(SubscriptionStatus.ACTIVE);
-        subscription.setUpdatedAt(LocalDateTime.now());
-
-        if (subscription.getCreatedAt() == null) {
-            subscription.setCreatedAt(LocalDateTime.now());
-        }
+        UserSubscription subscription = UserSubscription.builder()
+                .user(user)
+                .subscriptionPlan(plan)
+                .transaction(transaction)
+                .startDate(now)
+                .endDate(now.plusDays(plan.getDurationDays()))
+                .status(SubscriptionStatus.ACTIVE)
+                .autoRenew(false)
+                .build();
 
         subscriptionRepository.save(subscription);
-        // Gửi email hóa đơn sau khi lưu subscription xong
         emailService.sendInvoice(user, transaction, subscription);
     }
 
