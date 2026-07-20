@@ -14,5 +14,7 @@ public class UserResponse {
     String username;
     String email;
     UserRole role;
+    Boolean isActive;
     UserProfileResponse userProfile;
+    UserSubscriptionResponse subscription;
 }

@@ -88,6 +88,44 @@ public class PaymentServiceImpl implements PaymentService {
         return new PaymentHistoryResponse(dtos, nextCursor, hasMore);
     }
 
+    @Override
+    public com.examp.genifit.dto.response.AdminPaymentHistoryResponse getAdminHistory(Integer cursorId, int pageSize) {
+        int size = pageSize > 0 ? Math.min(pageSize, MAX_PAGE_SIZE) : DEFAULT_PAGE_SIZE;
+        Pageable pageable = PageRequest.of(0, size + 1);
+
+        List<PaymentTransaction> raw = (cursorId == null)
+                ? transactionRepository.findAllByOrderByTransactionIdDesc(pageable)
+                : transactionRepository.findByTransactionIdLessThanOrderByTransactionIdDesc(cursorId, pageable);
+
+        boolean hasMore = raw.size() > size;
+        if (hasMore) raw = raw.subList(0, size);
+
+        List<com.examp.genifit.dto.response.AdminPaymentHistoryResponse.AdminPaymentHistoryDto> dtos = raw.stream()
+                .map(t -> {
+                    User user = t.getUser();
+                    String avatarUrl = user.getUserProfile() != null ? user.getUserProfile().getAvatarUrl() : null;
+                    return new com.examp.genifit.dto.response.AdminPaymentHistoryResponse.AdminPaymentHistoryDto(
+                            t.getTransactionId(),
+                            t.getOrderCode(),
+                            t.getPlan().getPlanName(),
+                            t.getAmount(),
+                            t.getPaymentMethod().name(),
+                            t.getStatus().name(),
+                            t.getCreatedAt(),
+                            t.getUpdatedAt(),
+                            user.getUserId(),
+                            user.getUsername(),
+                            user.getEmail(),
+                            avatarUrl
+                    );
+                })
+                .toList();
+
+        Integer nextCursor = hasMore ? raw.get(raw.size() - 1).getTransactionId() : null;
+
+        return new com.examp.genifit.dto.response.AdminPaymentHistoryResponse(dtos, nextCursor, hasMore);
+    }
+
     // =========================================================================
     // PRIVATE HELPERS
     // =========================================================================

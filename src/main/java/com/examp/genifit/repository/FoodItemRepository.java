@@ -74,4 +74,7 @@ public interface FoodItemRepository extends JpaRepository<FoodItem, Integer> {
     List<FoodItem> findByCreatedBy_UserIdAndDeletedFalse(
             Integer userId
     );
+
+    long countByCreatedAtBetween(java.time.LocalDateTime start, java.time.LocalDateTime end);
+    long countByCreatedAtBefore(java.time.LocalDateTime end);
 }

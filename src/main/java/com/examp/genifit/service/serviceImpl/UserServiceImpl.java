@@ -45,383 +45,477 @@ import java.util.Random;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class UserServiceImpl implements UserService {
 
-    private final UserSubscriptionRepository userSubscriptionRepository;
-    private final SubscriptionPlanRepository subscriptionPlanRepository;
+        private final UserSubscriptionRepository userSubscriptionRepository;
+        private final SubscriptionPlanRepository subscriptionPlanRepository;
 
-    UserRepository userRepository;
-    OtpTokenRepository otpTokenRepository;
-    UserMapper userMapper;
-    PasswordEncoder passwordEncoder;
-    EmailService emailService;
-    UserProfileRepository userProfileRepository;
-    MoMoService  moMoService;
+        UserRepository userRepository;
+        OtpTokenRepository otpTokenRepository;
+        UserMapper userMapper;
+        PasswordEncoder passwordEncoder;
+        EmailService emailService;
+        UserProfileRepository userProfileRepository;
+        MoMoService moMoService;
 
-    @Override
-    @Transactional
-    public void generateAndSendOtp(String email) {
-        if (userRepository.existsByEmail(email)) {
-            throw new ApiException(ErrorCode.USER_EXISTED);
+        @Override
+        @Transactional
+        public void generateAndSendOtp(String email) {
+                if (userRepository.existsByEmail(email)) {
+                        throw new ApiException(ErrorCode.USER_EXISTED);
+                }
+
+                otpTokenRepository.deleteByEmail(email);
+                String otp = String.format("%06d", new Random().nextInt(999999));
+
+                OtpToken otpToken = OtpToken.builder()
+                                .email(email)
+                                .otpCode(otp)
+                                .expiryTime(LocalDateTime.now().plusMinutes(5))
+                                .build();
+                otpTokenRepository.save(otpToken);
+
+                emailService.sendRegistrationOtpEmail(email, otp);
         }
 
-        otpTokenRepository.deleteByEmail(email);
-        String otp = String.format("%06d", new Random().nextInt(999999));
+        @Override
+        @Transactional
+        public UserResponse createUser(CreateUserRequest request) {
+                if (userRepository.existsByUsername(request.getUsername())) {
+                        throw new ApiException(ErrorCode.USER_EXISTED);
+                }
 
-        OtpToken otpToken = OtpToken.builder()
-                .email(email)
-                .otpCode(otp)
-                .expiryTime(LocalDateTime.now().plusMinutes(5))
-                .build();
-        otpTokenRepository.save(otpToken);
+                OtpToken validOtp = otpTokenRepository.findByEmailAndOtpCode(request.getEmail(), request.getOtpCode())
+                                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_OTP));
 
-        emailService.sendRegistrationOtpEmail(email, otp);
-    }
+                if (validOtp.getExpiryTime().isBefore(LocalDateTime.now())) {
+                        throw new ApiException(ErrorCode.OTP_EXPIRED);
+                }
 
-    @Override
-    @Transactional
-    public UserResponse createUser(CreateUserRequest request) {
-        if (userRepository.existsByUsername(request.getUsername())) {
-            throw new ApiException(ErrorCode.USER_EXISTED);
+                User user = userMapper.toUser(request);
+                user.setPasswordHash(passwordEncoder.encode(request.getPasswordHash()));
+                user.setRole(UserRole.MEMBER);
+                user.setIsActive(true);
+                userRepository.save(user);
+
+                SubscriptionPlan freePlan = subscriptionPlanRepository.findFirstByPlanType(PlanType.FREE)
+                                .orElseThrow(() -> new RuntimeException("Hệ thống chưa cấu hình gói FREE mặc định!"));
+
+                UserSubscription defaultSubscription = UserSubscription.builder()
+                                .user(user)
+                                .subscriptionPlan(freePlan)
+                                .startDate(LocalDateTime.now())
+                                .endDate(LocalDateTime.now().plusYears(100))
+                                .status(SubscriptionStatus.ACTIVE)
+                                .autoRenew(true)
+                                .build();
+                userSubscriptionRepository.save(defaultSubscription);
+
+                otpTokenRepository.delete(validOtp);
+
+                return userMapper.toUserResponse(user);
         }
 
-        OtpToken validOtp = otpTokenRepository.findByEmailAndOtpCode(request.getEmail(), request.getOtpCode())
-                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_OTP));
+        @Override
+        public UserResponse getMyInfo() {
+                var context = SecurityContextHolder.getContext();
+                String currentUsername = context.getAuthentication().getName();
 
-        if (validOtp.getExpiryTime().isBefore(LocalDateTime.now())) {
-            throw new ApiException(ErrorCode.OTP_EXPIRED);
-        }
+                User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
+                                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
 
-        User user = userMapper.toUser(request);
-        user.setPasswordHash(passwordEncoder.encode(request.getPasswordHash()));
-        user.setRole(UserRole.MEMBER);
-        user.setIsActive(true);
-        userRepository.save(user);
+                UserResponse response = userMapper.toUserResponse(user);
 
-        SubscriptionPlan freePlan = subscriptionPlanRepository.findFirstByPlanType(PlanType.FREE)
-                .orElseThrow(() -> new RuntimeException("Hệ thống chưa cấu hình gói FREE mặc định!"));
-
-        UserSubscription defaultSubscription = UserSubscription.builder()
-                .user(user)
-                .subscriptionPlan(freePlan)
-                .startDate(LocalDateTime.now())
-                .endDate(LocalDateTime.now().plusYears(100))
-                .status(SubscriptionStatus.ACTIVE)
-                .autoRenew(true)
-                .build();
-        userSubscriptionRepository.save(defaultSubscription);
-
-        otpTokenRepository.delete(validOtp);
-
-        return userMapper.toUserResponse(user);
-    }
-
-    @Override
-    public UserResponse getMyInfo() {
-        var context = SecurityContextHolder.getContext();
-        String currentUsername = context.getAuthentication().getName();
-
-        User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
-
-        UserResponse response = userMapper.toUserResponse(user);
-
-        userProfileRepository.findByUser(user).ifPresent(profile -> {
-            response.setUserProfile(userMapper.toUserProfileResponse(profile));
-        });
-
-        return response;
-    }
-
-    @Override
-    @Transactional
-    public void changePassword(ChangePasswordRequest request) {
-        var context = SecurityContextHolder.getContext();
-        String currentUsername = context.getAuthentication().getName();
-
-        User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
-
-        if (!passwordEncoder.matches(request.getOldPassword(), user.getPasswordHash())) {
-            throw new ApiException(ErrorCode.VALIDATION_ERROR);
-        }
-
-        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
-        userRepository.save(user);
-    }
-
-    @Transactional
-    public UserSubscriptionResponse assignSubscription(AssignSubscriptionRequest request) {
-        if (request == null || request.getUserId() == null || request.getPlanId() == null) {
-            throw new ApiException(
-                    ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
-                    "Gói đăng kí này không hợp lệ hoặc không tồn tại"
-            );
-        }
-
-        User user = userRepository.findById(request.getUserId())
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
-
-        SubscriptionPlan plan = subscriptionPlanRepository.findById(request.getPlanId())
-                .orElseThrow(() -> new ApiException(ErrorCode.SUBSCRIPTION_PLAN_NOT_FOUND));
-
-        if (plan.getActive() == null || !plan.getActive()) {
-            throw new ApiException(
-                    ErrorCode.SUBSCRIPTION_PLAN_INACTIVE,
-                    "Gói đăng kí này hiện không còn hoạt động"
-            );
-        }
-
-        userSubscriptionRepository
-                .findFirstByUserAndStatusOrderByEndDateDesc(user, SubscriptionStatus.ACTIVE)
-                .ifPresent(oldSubscription -> {
-                    oldSubscription.setStatus(SubscriptionStatus.CANCELLED);
-                    oldSubscription.setCancelledAt(LocalDateTime.now());
-                    userSubscriptionRepository.save(oldSubscription);
+                userProfileRepository.findByUser(user).ifPresent(profile -> {
+                        response.setUserProfile(userMapper.toUserProfileResponse(profile));
                 });
 
-        LocalDateTime startDate = LocalDateTime.now();
-        LocalDateTime endDate = startDate.plusDays(plan.getDurationDays());
-
-        UserSubscription subscription = UserSubscription.builder()
-                .user(user)
-                .subscriptionPlan(plan)
-                .startDate(startDate)
-                .endDate(endDate)
-                .status(SubscriptionStatus.ACTIVE)
-                .autoRenew(request.getAutoRenew() == null ? false : request.getAutoRenew())
-                .build();
-
-        UserSubscription savedSubscription = userSubscriptionRepository.save(subscription);
-
-        return UserSubscriptionResponse.builder()
-                .subscriptionId(savedSubscription.getSubscriptionId())
-                .userId(savedSubscription.getUser().getUserId())
-                .username(savedSubscription.getUser().getUsername())
-                .planId(savedSubscription.getSubscriptionPlan().getPlanId())
-                .planType(savedSubscription.getSubscriptionPlan().getPlanType())
-                .planName(savedSubscription.getSubscriptionPlan().getPlanName())
-                .startDate(savedSubscription.getStartDate())
-                .endDate(savedSubscription.getEndDate())
-                .status(savedSubscription.getStatus())
-                .autoRenew(savedSubscription.getAutoRenew())
-                .cancelledAt(savedSubscription.getCancelledAt())
-                .createdAt(savedSubscription.getCreatedAt())
-                .updatedAt(savedSubscription.getUpdatedAt())
-                .build();    }
-
-    private User getCurrentUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        if (authentication == null || !authentication.isAuthenticated()) {
-            throw new ApiException(
-                    ErrorCode.UNAUTHENTICATED,
-                    "Người dùng chưa đăng nhập"
-            );
+                return response;
         }
 
-        Object principal = authentication.getPrincipal();
+        @Override
+        @Transactional
+        public void changePassword(ChangePasswordRequest request) {
+                var context = SecurityContextHolder.getContext();
+                String currentUsername = context.getAuthentication().getName();
 
-        if (principal == null || principal.equals("anonymousUser")) {
-            throw new ApiException(
-                    ErrorCode.UNAUTHENTICATED,
-                    "Người dùng chưa đăng nhập"
-            );
+                User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
+                                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+
+                if (!passwordEncoder.matches(request.getOldPassword(), user.getPasswordHash())) {
+                        throw new ApiException(ErrorCode.VALIDATION_ERROR);
+                }
+
+                user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+                userRepository.save(user);
         }
 
-        String username = authentication.getName();
+        @Transactional
+        public UserSubscriptionResponse assignSubscription(AssignSubscriptionRequest request) {
+                if (request == null || request.getUserId() == null || request.getPlanId() == null) {
+                        throw new ApiException(
+                                        ErrorCode.INVALID_SUBSCRIPTION_REQUEST,
+                                        "Gói đăng kí này không hợp lệ hoặc không tồn tại");
+                }
 
-        return userRepository.findByUsernameAndIsActiveTrue(username)
-                .orElseThrow(() -> new ApiException(
-                        ErrorCode.USER_NOT_FOUND,
-                        "Không tìm thấy người dùng"
-                ));
-    }
+                User user = userRepository.findById(request.getUserId())
+                                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
 
-    @Override
-    @Transactional
-    public void deleteMe() {
-        var context = SecurityContextHolder.getContext();
-        String currentUsername = context.getAuthentication().getName();
+                SubscriptionPlan plan = subscriptionPlanRepository.findById(request.getPlanId())
+                                .orElseThrow(() -> new ApiException(ErrorCode.SUBSCRIPTION_PLAN_NOT_FOUND));
 
-        User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
-                .orElseThrow(() -> new ApiException(
-                        ErrorCode.USER_NOT_FOUND,
-                        "Không tìm thấy người dùng"
-                ));
+                if (plan.getActive() == null || !plan.getActive()) {
+                        throw new ApiException(
+                                        ErrorCode.SUBSCRIPTION_PLAN_INACTIVE,
+                                        "Gói đăng kí này hiện không còn hoạt động");
+                }
 
-        user.setIsActive(false);
-        userRepository.save(user);
-    }
+                userSubscriptionRepository
+                                .findFirstByUserAndStatusOrderByEndDateDesc(user, SubscriptionStatus.ACTIVE)
+                                .ifPresent(oldSubscription -> {
+                                        oldSubscription.setStatus(SubscriptionStatus.CANCELLED);
+                                        oldSubscription.setCancelledAt(LocalDateTime.now());
+                                        userSubscriptionRepository.save(oldSubscription);
+                                });
 
-    @Override
-    @Transactional
-    public void generateAndSendOtpForForgotPassword(String email) {
-        if (!userRepository.existsByEmailAndIsActiveTrue(email)) {
-            throw new ApiException(
-                    ErrorCode.USER_NOT_FOUND,
-                    "Không tìm thấy người dùng"
-            );
+                LocalDateTime startDate = LocalDateTime.now();
+                LocalDateTime endDate = startDate.plusDays(plan.getDurationDays());
+
+                UserSubscription subscription = UserSubscription.builder()
+                                .user(user)
+                                .subscriptionPlan(plan)
+                                .startDate(startDate)
+                                .endDate(endDate)
+                                .status(SubscriptionStatus.ACTIVE)
+                                .autoRenew(request.getAutoRenew() == null ? false : request.getAutoRenew())
+                                .build();
+
+                UserSubscription savedSubscription = userSubscriptionRepository.save(subscription);
+
+                return UserSubscriptionResponse.builder()
+                                .subscriptionId(savedSubscription.getSubscriptionId())
+                                .userId(savedSubscription.getUser().getUserId())
+                                .username(savedSubscription.getUser().getUsername())
+                                .planId(savedSubscription.getSubscriptionPlan().getPlanId())
+                                .planType(savedSubscription.getSubscriptionPlan().getPlanType())
+                                .planName(savedSubscription.getSubscriptionPlan().getPlanName())
+                                .startDate(savedSubscription.getStartDate())
+                                .endDate(savedSubscription.getEndDate())
+                                .status(savedSubscription.getStatus())
+                                .autoRenew(savedSubscription.getAutoRenew())
+                                .cancelledAt(savedSubscription.getCancelledAt())
+                                .createdAt(savedSubscription.getCreatedAt())
+                                .updatedAt(savedSubscription.getUpdatedAt())
+                                .build();
         }
 
-        otpTokenRepository.deleteByEmail(email);
-        String otp = String.format("%06d", new Random().nextInt(999999));
+        private User getCurrentUser() {
+                Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-        OtpToken otpToken = OtpToken.builder()
-                .email(email)
-                .otpCode(otp)
-                .expiryTime(LocalDateTime.now().plusMinutes(5))
-                .build();
-        otpTokenRepository.save(otpToken);
+                if (authentication == null || !authentication.isAuthenticated()) {
+                        throw new ApiException(
+                                        ErrorCode.UNAUTHENTICATED,
+                                        "Người dùng chưa đăng nhập");
+                }
 
-        emailService.sendForgotPasswordOtpEmail(email, otp);
-    }
+                Object principal = authentication.getPrincipal();
 
-    @Override
-    @Transactional
-    public void resetPassword(ResetPasswordRequest request) {
-        User user = userRepository.findByEmailAndIsActiveTrue(request.getEmail())
-                .orElseThrow(() -> new ApiException(
-                        ErrorCode.USER_NOT_FOUND,
-                        "Không tìm thấy người dùng"
-                ));
+                if (principal == null || principal.equals("anonymousUser")) {
+                        throw new ApiException(
+                                        ErrorCode.UNAUTHENTICATED,
+                                        "Người dùng chưa đăng nhập");
+                }
 
-        OtpToken validOtp = otpTokenRepository.findByEmailAndOtpCode(request.getEmail(), request.getOtpCode())
-                .orElseThrow(() -> new ApiException(
-                        ErrorCode.INVALID_OTP,
-                        "Mã OTP không hợp lệ"
-                ));
+                String username = authentication.getName();
 
-        if (validOtp.getExpiryTime().isBefore(LocalDateTime.now())) {
-            throw new ApiException(
-                    ErrorCode.OTP_EXPIRED,
-                    "Mã OTP đã hết hạn"
-            );
+                return userRepository.findByUsernameAndIsActiveTrue(username)
+                                .orElseThrow(() -> new ApiException(
+                                                ErrorCode.USER_NOT_FOUND,
+                                                "Không tìm thấy người dùng"));
         }
 
-        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
-        userRepository.save(user);
-        otpTokenRepository.delete(validOtp);
-    }
+        @Override
+        @Transactional
+        public void deleteMe() {
+                var context = SecurityContextHolder.getContext();
+                String currentUsername = context.getAuthentication().getName();
 
-    @Override
-    public List<UserResponse> searchUsers(String keyword) {
-        List<User> users = userRepository.findByUsernameContainingIgnoreCase(keyword);
-        return users.stream().map(userMapper::toUserResponse).toList();
-    }
+                User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
+                                .orElseThrow(() -> new ApiException(
+                                                ErrorCode.USER_NOT_FOUND,
+                                                "Không tìm thấy người dùng"));
 
-    @Override
-    public UserResponse getUser(Integer id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new ApiException(
-                        ErrorCode.USER_NOT_FOUND,
-                        "Không tìm thấy người dùng"
-                ));
-
-        return userMapper.toUserResponse(user);
-    }
-
-    @Override
-    public List<UserResponse> getUsers() {
-        return userRepository.findAll().stream()
-                .map(userMapper::toUserResponse).toList();
-    }
-
-    @Override
-    @Transactional
-    public void deleteUserById(Integer id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new ApiException(
-                        ErrorCode.USER_NOT_FOUND,
-                        "Không tìm thấy người dùng"
-                ));
-
-        user.setIsActive(false);
-        userRepository.save(user);
-    }
-
-    @Override
-    @Transactional
-    public UserProfileResponse updateMyProfile(UpdateUserProfileRequest request) {
-        var context = SecurityContextHolder.getContext();
-        String currentUsername = context.getAuthentication().getName();
-
-        User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
-                .orElseThrow(() -> new ApiException(
-                        ErrorCode.USER_NOT_FOUND,
-                        "Không tìm thấy người dùng"
-                ));
-
-        UserProfile profile = userProfileRepository.findByUser(user)
-                .orElse(new UserProfile());
-
-        profile.setUser(user);
-
-
-        boolean isFirstTimeSettingGoal = profile.getTargetDate() == null;
-
-        boolean goalChanged = isFirstTimeSettingGoal ||
-                (request.getTargetWeightKg() != null && !request.getTargetWeightKg().equals(profile.getTargetWeightKg())) ||
-                (request.getTargetDate() != null && !request.getTargetDate().equals(profile.getTargetDate()));
-
-        if (goalChanged && request.getTargetWeightKg() != null && request.getTargetDate() != null) {
-            profile.setInitialWeight(request.getWeightKg());
-            profile.setGoalStartDate(LocalDate.now());
+                user.setIsActive(false);
+                userRepository.save(user);
         }
 
-        profile.setHeightCm(request.getHeightCm());
-        profile.setWeightKg(request.getWeightKg());
-        profile.setAge(request.getAge());
-        profile.setGender(request.getGender());
-        profile.setGoal(request.getGoal());
-        profile.setFirstName(request.getFirstName());
-        profile.setLastName(request.getLastName());
-        profile.setDateOfBirth(request.getDateOfBirth());
-        profile.setOccupation(request.getOccupation());
-        profile.setActivityLevel(request.getActivityLevel());
+        @Override
+        @Transactional
+        public void generateAndSendOtpForForgotPassword(String email) {
+                if (!userRepository.existsByEmailAndIsActiveTrue(email)) {
+                        throw new ApiException(
+                                        ErrorCode.USER_NOT_FOUND,
+                                        "Không tìm thấy người dùng");
+                }
 
-        profile.setTargetWeightKg(request.getTargetWeightKg());
-        profile.setTargetDate(request.getTargetDate());
-        profile.setMedicalConditions(request.getMedicalConditions());
-        profile.setAllergies(request.getAllergies());
+                otpTokenRepository.deleteByEmail(email);
+                String otp = String.format("%06d", new Random().nextInt(999999));
 
-        Double calculatedCalorie = CalorieCalculatorUtil.calculateTargetCalorie(
-                request.getWeightKg(),
-                request.getHeightCm(),
-                request.getAge(),
-                request.getGender(),
-                request.getActivityLevel(),
-                request.getGoal()
-        );
-        profile.setBaseTargetCalorie(calculatedCalorie);
+                OtpToken otpToken = OtpToken.builder()
+                                .email(email)
+                                .otpCode(otp)
+                                .expiryTime(LocalDateTime.now().plusMinutes(5))
+                                .build();
+                otpTokenRepository.save(otpToken);
 
-        userProfileRepository.save(profile);
+                emailService.sendForgotPasswordOtpEmail(email, otp);
+        }
 
-        return userMapper.toUserProfileResponse(profile);
-    }
+        @Override
+        @Transactional
+        public void resetPassword(ResetPasswordRequest request) {
+                User user = userRepository.findByEmailAndIsActiveTrue(request.getEmail())
+                                .orElseThrow(() -> new ApiException(
+                                                ErrorCode.USER_NOT_FOUND,
+                                                "Không tìm thấy người dùng"));
 
-    private record RefundResult(
-            Long usedDays,
-            RefundStatus refundStatus,
-            Integer refundPercent,
-            BigDecimal refundAmount,
-            String message
-    ) {
-    }
+                OtpToken validOtp = otpTokenRepository.findByEmailAndOtpCode(request.getEmail(), request.getOtpCode())
+                                .orElseThrow(() -> new ApiException(
+                                                ErrorCode.INVALID_OTP,
+                                                "Mã OTP không hợp lệ"));
 
-    @Override
-    @Transactional
-    public void updateAvatarUrl(String avatarUrl) {
-        var context = SecurityContextHolder.getContext();
-        String currentUsername = context.getAuthentication().getName();
+                if (validOtp.getExpiryTime().isBefore(LocalDateTime.now())) {
+                        throw new ApiException(
+                                        ErrorCode.OTP_EXPIRED,
+                                        "Mã OTP đã hết hạn");
+                }
 
-        User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+                user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+                userRepository.save(user);
+                otpTokenRepository.delete(validOtp);
+        }
 
-        UserProfile profile = userProfileRepository.findByUser(user)
-                .orElse(new UserProfile());
-        profile.setUser(user);
-        profile.setAvatarUrl(avatarUrl);
+        @Override
+        public List<UserResponse> searchUsers(String keyword) {
+                List<User> users = userRepository.findByUsernameContainingIgnoreCase(keyword);
+                return users.stream().map(userMapper::toUserResponse).toList();
+        }
 
-        userProfileRepository.save(profile);
-    }
+        @Override
+        public UserResponse getUser(Integer id) {
+                User user = userRepository.findById(id)
+                                .orElseThrow(() -> new ApiException(
+                                                ErrorCode.USER_NOT_FOUND,
+                                                "Không tìm thấy người dùng"));
+
+                UserResponse response = userMapper.toUserResponse(user);
+                userSubscriptionRepository
+                                .findFirstByUserAndStatusOrderByEndDateDesc(user, SubscriptionStatus.ACTIVE)
+                                .ifPresent(subscription -> {
+                                        response.setSubscription(UserSubscriptionResponse.builder()
+                                                        .subscriptionId(subscription.getSubscriptionId())
+                                                        .userId(subscription.getUser().getUserId())
+                                                        .username(subscription.getUser().getUsername())
+                                                        .planId(subscription.getSubscriptionPlan().getPlanId())
+                                                        .planType(subscription.getSubscriptionPlan().getPlanType())
+                                                        .planName(subscription.getSubscriptionPlan().getPlanName())
+                                                        .startDate(subscription.getStartDate())
+                                                        .endDate(subscription.getEndDate())
+                                                        .status(subscription.getStatus())
+                                                        .autoRenew(subscription.getAutoRenew())
+                                                        .cancelledAt(subscription.getCancelledAt())
+                                                        .createdAt(subscription.getCreatedAt())
+                                                        .updatedAt(subscription.getUpdatedAt())
+                                                        .build());
+                                });
+                return response;
+        }
+
+        @Override
+        public List<UserResponse> getUsers() {
+                return userRepository.findAll().stream()
+                                .map(userMapper::toUserResponse).toList();
+        }
+
+        @Override
+        @Transactional
+        public void deleteUserById(Integer id) {
+                User user = userRepository.findById(id)
+                                .orElseThrow(() -> new ApiException(
+                                                ErrorCode.USER_NOT_FOUND,
+                                                "Không tìm thấy người dùng"));
+
+                user.setIsActive(false);
+                userRepository.save(user);
+        }
+
+        @Override
+        @Transactional
+        public void restoreUserById(Integer id) {
+                User user = userRepository.findById(id)
+                                .orElseThrow(() -> new ApiException(
+                                                ErrorCode.USER_NOT_FOUND,
+                                                "Không tìm thấy người dùng"));
+
+                user.setIsActive(true);
+                userRepository.save(user);
+        }
+
+        @Override
+        @Transactional
+        public UserProfileResponse updateMyProfile(UpdateUserProfileRequest request) {
+                var context = SecurityContextHolder.getContext();
+                String currentUsername = context.getAuthentication().getName();
+
+                User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
+                                .orElseThrow(() -> new ApiException(
+                                                ErrorCode.USER_NOT_FOUND,
+                                                "Không tìm thấy người dùng"));
+
+                UserProfile profile = userProfileRepository.findByUser(user)
+                                .orElse(new UserProfile());
+
+                profile.setUser(user);
+
+                boolean isFirstTimeSettingGoal = profile.getTargetDate() == null;
+
+                boolean goalChanged = isFirstTimeSettingGoal ||
+                                (request.getTargetWeightKg() != null
+                                                && !request.getTargetWeightKg().equals(profile.getTargetWeightKg()))
+                                ||
+                                (request.getTargetDate() != null
+                                                && !request.getTargetDate().equals(profile.getTargetDate()));
+
+                if (goalChanged && request.getTargetWeightKg() != null && request.getTargetDate() != null) {
+                        profile.setInitialWeight(request.getWeightKg());
+                        profile.setGoalStartDate(LocalDate.now());
+                }
+
+                profile.setHeightCm(request.getHeightCm());
+                profile.setWeightKg(request.getWeightKg());
+                profile.setAge(request.getAge());
+                profile.setGender(request.getGender());
+                profile.setGoal(request.getGoal());
+                profile.setFirstName(request.getFirstName());
+                profile.setLastName(request.getLastName());
+                profile.setDateOfBirth(request.getDateOfBirth());
+                profile.setOccupation(request.getOccupation());
+                profile.setActivityLevel(request.getActivityLevel());
+
+                profile.setTargetWeightKg(request.getTargetWeightKg());
+                profile.setTargetDate(request.getTargetDate());
+                profile.setMedicalConditions(request.getMedicalConditions());
+                profile.setAllergies(request.getAllergies());
+
+                Double calculatedCalorie = CalorieCalculatorUtil.calculateTargetCalorie(
+                                request.getWeightKg(),
+                                request.getHeightCm(),
+                                request.getAge(),
+                                request.getGender(),
+                                request.getActivityLevel(),
+                                request.getGoal());
+                profile.setBaseTargetCalorie(calculatedCalorie);
+
+                userProfileRepository.save(profile);
+
+                return userMapper.toUserProfileResponse(profile);
+        }
+
+        @Override
+        @Transactional
+        public UserProfileResponse updateUserProfileByAdmin(Integer userId, UpdateUserProfileRequest request) {
+                User user = userRepository.findById(userId)
+                                .orElseThrow(() -> new ApiException(
+                                                ErrorCode.USER_NOT_FOUND,
+                                                "Không tìm thấy người dùng"));
+
+                UserProfile profile = userProfileRepository.findByUser(user)
+                                .orElse(new UserProfile());
+
+                profile.setUser(user);
+
+                boolean isFirstTimeSettingGoal = profile.getTargetDate() == null;
+
+                boolean goalChanged = isFirstTimeSettingGoal ||
+                                (request.getTargetWeightKg() != null
+                                                && !request.getTargetWeightKg().equals(profile.getTargetWeightKg()))
+                                ||
+                                (request.getTargetDate() != null
+                                                && !request.getTargetDate().equals(profile.getTargetDate()));
+
+                if (goalChanged && request.getTargetWeightKg() != null && request.getTargetDate() != null) {
+                        profile.setInitialWeight(request.getWeightKg());
+                        profile.setGoalStartDate(LocalDate.now());
+                }
+
+                if (request.getHeightCm() != null) profile.setHeightCm(request.getHeightCm());
+                if (request.getWeightKg() != null) profile.setWeightKg(request.getWeightKg());
+                if (request.getAge() != null) profile.setAge(request.getAge());
+                if (request.getGender() != null) profile.setGender(request.getGender());
+                if (request.getGoal() != null) profile.setGoal(request.getGoal());
+                if (request.getFirstName() != null) profile.setFirstName(request.getFirstName());
+                if (request.getLastName() != null) profile.setLastName(request.getLastName());
+                if (request.getDateOfBirth() != null) profile.setDateOfBirth(request.getDateOfBirth());
+                if (request.getOccupation() != null) profile.setOccupation(request.getOccupation());
+                if (request.getActivityLevel() != null) profile.setActivityLevel(request.getActivityLevel());
+                if (request.getTargetWeightKg() != null) profile.setTargetWeightKg(request.getTargetWeightKg());
+                if (request.getTargetDate() != null) profile.setTargetDate(request.getTargetDate());
+                if (request.getMedicalConditions() != null) profile.setMedicalConditions(request.getMedicalConditions());
+                if (request.getAllergies() != null) profile.setAllergies(request.getAllergies());
+
+                if (request.getWeightKg() != null && request.getHeightCm() != null
+                                && request.getAge() != null && request.getGender() != null
+                                && request.getActivityLevel() != null && request.getGoal() != null) {
+                        Double calculatedCalorie = CalorieCalculatorUtil.calculateTargetCalorie(
+                                        request.getWeightKg(),
+                                        request.getHeightCm(),
+                                        request.getAge(),
+                                        request.getGender(),
+                                        request.getActivityLevel(),
+                                        request.getGoal());
+                        profile.setBaseTargetCalorie(calculatedCalorie);
+                }
+
+                userProfileRepository.save(profile);
+
+                return userMapper.toUserProfileResponse(profile);
+        }
+
+        private record RefundResult(
+                        Long usedDays,
+                        RefundStatus refundStatus,
+                        Integer refundPercent,
+                        BigDecimal refundAmount,
+                        String message) {
+        }
+
+        @Override
+        @Transactional
+        public void updateAvatarUrl(String avatarUrl) {
+                var context = SecurityContextHolder.getContext();
+                String currentUsername = context.getAuthentication().getName();
+
+                User user = userRepository.findByUsernameAndIsActiveTrue(currentUsername)
+                                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+
+                UserProfile profile = userProfileRepository.findByUser(user)
+                                .orElse(new UserProfile());
+                profile.setUser(user);
+                profile.setAvatarUrl(avatarUrl);
+
+                userProfileRepository.save(profile);
+        }
+
+        @Override
+        @Transactional
+        public void updateAvatarUrlByAdmin(Integer userId, String avatarUrl) {
+                User user = userRepository.findById(userId)
+                                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+
+                UserProfile profile = userProfileRepository.findByUser(user)
+                                .orElse(new UserProfile());
+                profile.setUser(user);
+                profile.setAvatarUrl(avatarUrl);
+
+                userProfileRepository.save(profile);
+        }
 
 }

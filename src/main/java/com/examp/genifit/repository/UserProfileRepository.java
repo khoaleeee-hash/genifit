@@ -10,4 +10,6 @@ public interface UserProfileRepository extends JpaRepository<UserProfile, Intege
 
     Optional<UserProfile> findByUser_UserId(Integer userId);
     Optional<UserProfile> findByUser(User user);
+    
+    long countByGoal(com.examp.genifit.entity.GoalType goal);
 }

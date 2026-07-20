@@ -15,19 +15,38 @@ import java.util.List;
 
 public interface UserService {
     UserResponse createUser(CreateUserRequest request);
+
     UserResponse getUser(Integer id);
+
     void generateAndSendOtp(String email);
-//    UserResponse updateUser(Integer userId, UserUpdateRequest request)
+
+    // UserResponse updateUser(Integer userId, UserUpdateRequest request)
     UserResponse getMyInfo();
+
     List<UserResponse> searchUsers(String keyword);
+
     List<UserResponse> getUsers();
+
     void changePassword(ChangePasswordRequest request);
+
     void resetPassword(ResetPasswordRequest request);
+
     void deleteMe();
+
     void deleteUserById(Integer id);
+
+    void restoreUserById(Integer id);
+
     void generateAndSendOtpForForgotPassword(String email);
+
     UserProfileResponse updateMyProfile(UpdateUserProfileRequest request);
+
+    UserProfileResponse updateUserProfileByAdmin(Integer userId, UpdateUserProfileRequest request);
+
     void updateAvatarUrl(String avatarUrl);
+
+    void updateAvatarUrlByAdmin(Integer userId, String avatarUrl);
+
     UserSubscriptionResponse assignSubscription(AssignSubscriptionRequest request);
 
 }

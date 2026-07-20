@@ -18,4 +18,7 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     Optional<User> findByEmail(String email);
     Optional<User> findByUsername(String username);
     
+    long countByCreatedAtBetween(java.time.LocalDateTime start, java.time.LocalDateTime end);
+    long countByCreatedAtBefore(java.time.LocalDateTime end);
+    List<User> findTop5ByOrderByCreatedAtDesc();
 }
